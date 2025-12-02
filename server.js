@@ -24,7 +24,9 @@ const INITIAL_RETRY_DELAY = 1000; // 1 секунда
 const SYSTEM_PROMPT = `Ты — GorAgent, дружелюбный и умный ИИ-ассистент. 
 Ты помогаешь пользователям с ответами на вопросы, написанием кода, объяснением концепций и творческими задачами.
 Отвечай на русском языке, если пользователь пишет на русском.
-Будь краток, но информативен. Используй Markdown для форматирования, когда это уместно.`;
+Будь краток, но информативен. Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`;
 
 // Функция задержки
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -42,6 +44,7 @@ async function callOpenAI(messages, retryCount = 0) {
             messages,
             max_tokens: 2048,
             temperature: 0.7,
+            response_format: { type: "json_object" },
         }),
     });
 
@@ -108,7 +111,21 @@ app.post('/api/chat', async (req, res) => {
             messages.push({ role: 'user', content: message });
         }
 
-        console.log(`[${new Date().toISOString()}] Запрос к OpenAI:`, message.substring(0, 50) + '...');
+        // Логируем структуру запроса
+        const requestBody = {
+            model: OPENAI_MODEL,
+            messages,
+            max_tokens: 2048,
+            temperature: 0.7,
+            response_format: { type: "json_object" },
+        };
+        
+        console.log('\n' + '='.repeat(60));
+        console.log(`[${new Date().toISOString()}] ЗАПРОС К OpenAI`);
+        console.log('='.repeat(60));
+        console.log('Структура запроса:');
+        console.log(JSON.stringify(requestBody, null, 2));
+        console.log('='.repeat(60) + '\n');
 
         // Запрос к OpenAI API с автоматическим retry
         const response = await callOpenAI(messages);
@@ -136,11 +153,37 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const data = await response.json();
-        const reply = data.choices?.[0]?.message?.content || 'Не удалось получить ответ.';
+        const rawReply = data.choices?.[0]?.message?.content || '{"message": "", "answer": "Не удалось получить ответ."}';
 
-        console.log(`[${new Date().toISOString()}] Ответ получен:`, reply.substring(0, 50) + '...');
+        // Логируем сырой ответ от OpenAI
+        console.log('\n' + '='.repeat(60));
+        console.log(`[${new Date().toISOString()}] ОТВЕТ ОТ OpenAI`);
+        console.log('='.repeat(60));
+        console.log('Сырой ответ от API:');
+        console.log(JSON.stringify(data, null, 2));
+        console.log('-'.repeat(60));
+        console.log('Контент сообщения (rawReply):');
+        console.log(rawReply);
+        console.log('='.repeat(60) + '\n');
 
-        res.json({ reply });
+        // Парсим JSON ответ от модели
+        let parsedReply;
+        try {
+            parsedReply = JSON.parse(rawReply);
+        } catch (e) {
+            console.error('Ошибка парсинга JSON ответа:', e);
+            parsedReply = { message: message, answer: rawReply };
+        }
+
+        // Логируем распарсенный ответ
+        console.log('\n' + '='.repeat(60));
+        console.log(`[${new Date().toISOString()}] РАСПАРСЕННЫЙ ОТВЕТ`);
+        console.log('='.repeat(60));
+        console.log('Отправляем клиенту:');
+        console.log(JSON.stringify(parsedReply, null, 2));
+        console.log('='.repeat(60) + '\n');
+
+        res.json(parsedReply);
 
     } catch (error) {
         console.error('Server Error:', error);

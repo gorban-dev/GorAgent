@@ -181,15 +181,26 @@ async function sendToApi(message) {
     setUILoading(true);
     
     try {
+        // Формируем запрос
+        const requestBody = {
+            message,
+            history: conversationHistory.slice(-20) // Последние 20 сообщений для контекста
+        };
+        
+        // Логируем запрос в консоль браузера
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #4CAF50');
+        console.log('%c📤 ЗАПРОС К СЕРВЕРУ', 'color: #4CAF50; font-weight: bold; font-size: 14px');
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #4CAF50');
+        console.log('Структура запроса:');
+        console.log(requestBody);
+        console.log('%c───────────────────────────────────────────────────────', 'color: #4CAF50');
+        
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                message,
-                history: conversationHistory.slice(-20) // Последние 20 сообщений для контекста
-            }),
+            body: JSON.stringify(requestBody),
         });
         
         if (!response.ok) {
@@ -198,10 +209,30 @@ async function sendToApi(message) {
         }
         
         const data = await response.json();
-        const agentReply = data.reply || data.message || 'Не удалось получить ответ.';
+        
+        // Логируем ответ в консоль браузера
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
+        console.log('%c📥 ОТВЕТ ОТ СЕРВЕРА', 'color: #2196F3; font-weight: bold; font-size: 14px');
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
+        console.log('Сырой JSON ответ:');
+        console.log(data);
+        console.log('%c───────────────────────────────────────────────────────', 'color: #2196F3');
+        console.log('Распарсенные поля:');
+        console.log('  message:', data.message);
+        console.log('  answer:', data.answer);
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
+        
+        // Ответ приходит в формате { message: "...", answer: "..." }
+        const agentReply = data.answer || data.reply || 'Не удалось получить ответ.';
+        
+        // Форматируем JSON для красивого отображения
+        const jsonString = JSON.stringify(data, null, 2);
+        
+        // Показываем сырой JSON ответ
+        const jsonMessage = `**Ответ в формате JSON:**\n\`\`\`json\n${jsonString}\n\`\`\`\n\n**Человекочитаемый ответ на сообщение:**\n${agentReply}`;
         
         // Добавить ответ агента
-        addMessage(agentReply, 'agent');
+        addMessage(jsonMessage, 'agent');
         conversationHistory.push({ role: 'assistant', content: agentReply });
         
     } catch (error) {
