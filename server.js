@@ -20,8 +20,8 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 секунда
 
-// Системное сообщение для агента
-const SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом. 
+// Дефолтное системное сообщение для агента (используется если клиент не прислал своё)
+const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом. 
 Ты помогаешь гостям подобрать идеальный кальян на основе их предпочтений.
 
 ВАЖНО: Ты должен вести диалог по следующему сценарию:
@@ -114,7 +114,7 @@ app.post('/api/chat', async (req, res) => {
             });
         }
 
-        const { message, history = [] } = req.body;
+        const { message, history = [], systemPrompt } = req.body;
 
         // Валидация
         if (!message || typeof message !== 'string') {
@@ -125,9 +125,19 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Сообщение слишком длинное' });
         }
 
+        // Используем переданный systemPrompt или дефолтный
+        const activeSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+        
+        // Логируем используемый System Prompt
+        console.log('\n' + '~'.repeat(60));
+        console.log(`[${new Date().toISOString()}] АКТИВНЫЙ SYSTEM PROMPT`);
+        console.log('~'.repeat(60));
+        console.log(activeSystemPrompt.substring(0, 200) + '...');
+        console.log('~'.repeat(60) + '\n');
+
         // Формируем сообщения для OpenAI
         const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: activeSystemPrompt },
             // Добавляем последние сообщения из истории для контекста
             ...history.slice(-20).map(msg => ({
                 role: msg.role,

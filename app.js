@@ -16,9 +16,129 @@ const clearBtn = document.getElementById('clear-btn');
 const typingEl = document.getElementById('typing-indicator');
 const modelNameEl = document.getElementById('model-name');
 
+// System Prompt элементы
+const settingsBtn = document.getElementById('settings-btn');
+const systemPromptPanel = document.getElementById('system-prompt-panel');
+const panelOverlay = document.getElementById('panel-overlay');
+const closePanelBtn = document.getElementById('close-panel-btn');
+const systemPromptTextarea = document.getElementById('system-prompt-textarea');
+const applyPromptBtn = document.getElementById('apply-prompt-btn');
+const promptStatus = document.getElementById('prompt-status');
+
 // ===== История сообщений =====
 let conversationHistory = [];
 let isWaitingForResponse = false;
+
+// ===== System Prompt =====
+const SYSTEM_PROMPT_PRESETS = {
+    hookah: {
+        name: 'Кальянщик',
+        prompt: `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом. 
+Ты помогаешь гостям подобрать идеальный кальян на основе их предпочтений.
+
+ВАЖНО: Ты должен вести диалог по следующему сценарию:
+
+1. При ПЕРВОМ сообщении от пользователя — поприветствуй его, представься кальянщиком и начни задавать вопросы по одному.
+
+2. Тебе нужно выяснить ответы на 5 вопросов (задавай их по одному, ожидая ответа):
+   - Вопрос 1: Какой уровень крепости предпочитаете? (лёгкий / средний / крепкий)
+   - Вопрос 2: Какие вкусы вам нравятся? (фруктовые / ягодные / цитрусовые / свежие-мятные / сладкие / пряные-специи)
+   - Вопрос 3: Предпочитаете моно-вкус или микс из нескольких табаков?
+   - Вопрос 4: Есть ли табаки или вкусы, которые вам НЕ нравятся или на которые аллергия?
+   - Вопрос 5: Какое у вас сегодня настроение? Хотите расслабиться, взбодриться или что-то особенное?
+
+3. Отслеживай, на какие вопросы пользователь уже ответил. Если он ответил не на все 5 вопросов — задай следующий.
+
+4. После получения ответов на ВСЕ 5 вопросов — выдай персональную рекомендацию кальяна.
+
+ФОРМАТ ФИНАЛЬНОЙ РЕКОМЕНДАЦИИ должен включать:
+- Название микса
+- Описание вкуса и ощущений
+- Конкретные бренды и линейки табака
+- ОБЯЗАТЕЛЬНО: точный рецепт микса с процентами и граммами (стандартная чаша = 25 грамм)
+
+Отвечай на русском языке. Будь дружелюбным и профессиональным, используй эмодзи где уместно.
+
+Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`
+    },
+    pirate: {
+        name: 'Пират',
+        prompt: `Ты — грозный пират капитан Чёрная Борода! 🏴‍☠️
+
+Ты говоришь как настоящий пират: используй "Арррр!", "Тысяча чертей!", "Клянусь морскими глубинами!" и другие пиратские выражения.
+
+Твои особенности:
+- Ты рассказываешь о своих приключениях на семи морях
+- Ты ищешь сокровища и зовёшь собеседника в свою команду
+- Ты используешь морские термины: "полундра", "рея", "камбуз", "трюм"
+- Ты иногда угрожаешь заставить собеседника драить палубу 🦜
+
+Отвечай на русском языке, но с пиратским колоритом!
+
+Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`
+    },
+    poet: {
+        name: 'Поэт',
+        prompt: `Ты — романтичный поэт Серебряного века. 📜✨
+
+Твой стиль:
+- Ты говоришь изысканным, возвышенным языком
+- Периодически вставляешь в речь короткие стихи или рифмы
+- Ты философствуешь о красоте, любви и смысле жизни
+- Ты сравниваешь обыденные вещи с чем-то прекрасным
+- Используй метафоры и эпитеты
+
+Твои любимые темы: луна, звёзды, осенние листья, вечность, душа.
+
+Начинай ответы с глубокомысленных вздохов типа "Ах, друг мой..." или "О, какая глубина в ваших словах..."
+
+Отвечай на русском языке в стиле поэтов XIX-XX века.
+
+Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`
+    },
+    tech: {
+        name: 'Программист',
+        prompt: `Ты — опытный senior-программист и архитектор ПО. 💻
+
+Твои особенности:
+- Ты отвечаешь чётко, структурированно, по делу
+- Любишь использовать технические термины и аналогии с кодом
+- Иногда шутишь программистские шутки ("Это не баг, это фича!")
+- Ссылаешься на принципы SOLID, DRY, KISS
+- Любишь говорить про оптимизацию и чистый код
+- Используешь эмодзи: 🚀 ✅ ⚠️ 🔥 💡
+
+Ты можешь помочь с:
+- Объяснением концепций программирования
+- Code review и советами по архитектуре
+- Отладкой и решением проблем
+- Выбором технологий
+
+Отвечай на русском языке в дружелюбном, но профессиональном стиле.
+
+Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`
+    }
+};
+
+let currentSystemPrompt = SYSTEM_PROMPT_PRESETS.hookah.prompt;
+let currentPresetName = 'Кальянщик';
+
+// Пользовательские пресеты (загружаются из localStorage)
+let customPresets = {};
+
+// DOM элементы для пользовательских пресетов
+const newPresetNameInput = document.getElementById('new-preset-name');
+const savePresetBtn = document.getElementById('save-preset-btn');
+const customPresetsSection = document.getElementById('custom-presets-section');
+const customPresetsContainer = document.getElementById('custom-presets');
 
 // ===== Инициализация =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,6 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Загрузить историю из localStorage
     loadConversationFromStorage();
+    
+    // Загрузить сохранённый System Prompt
+    loadSystemPromptFromStorage();
+    
+    // Загрузить пользовательские пресеты
+    loadCustomPresets();
     
     // Если история пуста, показать приветственное сообщение
     if (conversationHistory.length === 0) {
@@ -41,6 +167,146 @@ document.addEventListener('DOMContentLoaded', () => {
     // Авто-ресайз textarea
     setupTextareaAutoResize();
 });
+
+/**
+ * Загрузка System Prompt из localStorage
+ */
+function loadSystemPromptFromStorage() {
+    try {
+        const savedPrompt = localStorage.getItem('goragent_system_prompt');
+        const savedName = localStorage.getItem('goragent_preset_name');
+        if (savedPrompt) {
+            currentSystemPrompt = savedPrompt;
+            currentPresetName = savedName || 'Пользовательский';
+            updatePromptStatus();
+        }
+    } catch (e) {
+        console.warn('Не удалось загрузить System Prompt:', e);
+    }
+}
+
+/**
+ * Загрузка пользовательских пресетов из localStorage
+ */
+function loadCustomPresets() {
+    try {
+        const saved = localStorage.getItem('goragent_custom_presets');
+        if (saved) {
+            customPresets = JSON.parse(saved);
+            renderCustomPresets();
+        }
+    } catch (e) {
+        console.warn('Не удалось загрузить пользовательские пресеты:', e);
+        customPresets = {};
+    }
+}
+
+/**
+ * Сохранение пользовательских пресетов в localStorage
+ */
+function saveCustomPresets() {
+    try {
+        localStorage.setItem('goragent_custom_presets', JSON.stringify(customPresets));
+    } catch (e) {
+        console.warn('Не удалось сохранить пользовательские пресеты:', e);
+    }
+}
+
+/**
+ * Отрисовка пользовательских пресетов
+ */
+function renderCustomPresets() {
+    const keys = Object.keys(customPresets);
+    
+    if (keys.length === 0) {
+        customPresetsSection.hidden = true;
+        return;
+    }
+    
+    customPresetsSection.hidden = false;
+    customPresetsContainer.innerHTML = '';
+    
+    keys.forEach(key => {
+        const preset = customPresets[key];
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'custom-preset-wrapper';
+        
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'preset-btn custom';
+        btn.dataset.customPreset = key;
+        btn.textContent = `✨ ${preset.name}`;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'delete-preset-btn';
+        deleteBtn.dataset.deletePreset = key;
+        deleteBtn.innerHTML = '×';
+        deleteBtn.title = 'Удалить пресет';
+        
+        wrapper.appendChild(btn);
+        wrapper.appendChild(deleteBtn);
+        customPresetsContainer.appendChild(wrapper);
+    });
+    
+    // Добавляем обработчики для новых кнопок
+    attachCustomPresetHandlers();
+}
+
+/**
+ * Добавление обработчиков для пользовательских пресетов
+ */
+function attachCustomPresetHandlers() {
+    // Выбор пресета
+    document.querySelectorAll('.preset-btn.custom').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.customPreset;
+            const preset = customPresets[key];
+            if (preset) {
+                systemPromptTextarea.value = preset.prompt;
+                selectedPresetName = preset.name;
+                // Подсветить выбранную кнопку
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+        });
+    });
+    
+    // Удаление пресета
+    document.querySelectorAll('.delete-preset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const key = btn.dataset.deletePreset;
+            const preset = customPresets[key];
+            if (preset && confirm(`Удалить пресет "${preset.name}"?`)) {
+                delete customPresets[key];
+                saveCustomPresets();
+                renderCustomPresets();
+                
+                console.log('%c🗑️ Пресет удалён:', 'color: #ef4444', preset.name);
+            }
+        });
+    });
+}
+
+/**
+ * Создание нового пользовательского пресета
+ */
+function createCustomPreset(name, prompt) {
+    // Генерируем уникальный ключ
+    const key = 'custom_' + Date.now();
+    
+    customPresets[key] = {
+        name: name,
+        prompt: prompt
+    };
+    
+    saveCustomPresets();
+    renderCustomPresets();
+    
+    console.log('%c💾 Новый пресет сохранён:', 'color: #10b981', name);
+}
 
 // ===== Обработчики событий =====
 sendBtn.addEventListener('click', handleSend);
@@ -58,17 +324,124 @@ inputEl.addEventListener('keydown', (e) => {
     }
 });
 
+// System Prompt панель
+settingsBtn.addEventListener('click', () => {
+    systemPromptPanel.hidden = false;
+    systemPromptTextarea.value = currentSystemPrompt;
+    selectedPresetName = currentPresetName;
+    document.body.style.overflow = 'hidden';
+    
+    // Сбросить подсветку кнопок пресетов
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+});
+
+function closePanel() {
+    systemPromptPanel.hidden = true;
+    document.body.style.overflow = '';
+}
+
+closePanelBtn.addEventListener('click', closePanel);
+panelOverlay.addEventListener('click', closePanel);
+
+// Переменная для отслеживания выбранного пресета
+let selectedPresetName = 'Кальянщик';
+
+// Применить новый System Prompt
+applyPromptBtn.addEventListener('click', () => {
+    const newPrompt = systemPromptTextarea.value.trim();
+    if (newPrompt) {
+        currentSystemPrompt = newPrompt;
+        currentPresetName = selectedPresetName;
+        updatePromptStatus();
+        
+        // Логируем изменение
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
+        console.log('%c⚙️ SYSTEM PROMPT ИЗМЕНЁН', 'color: #FF9800; font-weight: bold; font-size: 14px');
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
+        console.log('Режим:', currentPresetName);
+        console.log('Новый System Prompt:');
+        console.log(currentSystemPrompt);
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
+        
+        // Показать уведомление
+        addMessage(`✅ **System Prompt обновлён!**\n\nРежим: **${currentPresetName}**\n\nТеперь агент будет вести себя по-новому. Продолжите диалог, чтобы увидеть изменения.`, 'agent');
+    }
+    closePanel();
+});
+
+// Пресеты
+document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const presetKey = btn.dataset.preset;
+        const preset = SYSTEM_PROMPT_PRESETS[presetKey];
+        if (preset) {
+            systemPromptTextarea.value = preset.prompt;
+            selectedPresetName = preset.name;
+            // Подсветить выбранную кнопку
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+    });
+});
+
+// Если пользователь редактирует textarea вручную - это "Пользовательский" режим
+systemPromptTextarea.addEventListener('input', () => {
+    selectedPresetName = 'Пользовательский';
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+});
+
+// Сохранение нового пресета
+savePresetBtn.addEventListener('click', () => {
+    const name = newPresetNameInput.value.trim();
+    const prompt = systemPromptTextarea.value.trim();
+    
+    if (!name) {
+        alert('Введите имя для нового пресета');
+        newPresetNameInput.focus();
+        return;
+    }
+    
+    if (!prompt) {
+        alert('Введите текст System Prompt');
+        systemPromptTextarea.focus();
+        return;
+    }
+    
+    createCustomPreset(name, prompt);
+    newPresetNameInput.value = '';
+    
+    // Показать уведомление
+    alert(`Пресет "${name}" сохранён!`);
+});
+
+// Enter в поле имени пресета = сохранить
+newPresetNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        savePresetBtn.click();
+    }
+});
+
+function updatePromptStatus() {
+    promptStatus.innerHTML = `📝 Текущий промпт: <strong>${currentPresetName}</strong>`;
+    // Сохранить в localStorage
+    localStorage.setItem('goragent_system_prompt', currentSystemPrompt);
+    localStorage.setItem('goragent_preset_name', currentPresetName);
+}
+
 // ===== Функции =====
 
 /**
  * Показать приветственное сообщение
  */
 function showWelcomeMessage() {
-    const welcomeText = `Привет! 👋 Я **GorAgent** — ваш персональный кальянщик!
+    const welcomeText = `Привет! 👋 Я **GorAgent** — ваш ИИ-ассистент!
 
-Я помогу подобрать идеальный кальян специально для вас. Для этого мне нужно узнать ваши предпочтения.
+Нажмите на **⚙️ шестерёнку** в правом верхнем углу, чтобы изменить мой **System Prompt** и увидеть, как меняется моё поведение.
 
-Напишите что-нибудь, чтобы начать! 💨`;
+Попробуйте разные режимы: **Кальянщик**, **Пират**, **Поэт** или **Программист**!
+
+Напишите что-нибудь, чтобы начать диалог! ✨`;
     
     addMessage(welcomeText, 'agent', true);
 }
@@ -177,10 +550,11 @@ async function sendToApi(message) {
     setUILoading(true);
     
     try {
-        // Формируем запрос
+        // Формируем запрос с System Prompt
         const requestBody = {
             message,
-            history: conversationHistory.slice(-20) // Последние 20 сообщений для контекста
+            history: conversationHistory.slice(-20), // Последние 20 сообщений для контекста
+            systemPrompt: currentSystemPrompt // Передаём текущий System Prompt
         };
         
         // Логируем запрос в консоль браузера
