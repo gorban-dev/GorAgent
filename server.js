@@ -61,7 +61,7 @@ const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональны
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Функция запроса к OpenAI с retry
-async function callOpenAI(messages, retryCount = 0) {
+async function callOpenAI(messages, temperature = 0.7, retryCount = 0) {
     const response = await fetch(OPENAI_API_URL, {
         method: 'POST',
         headers: {
@@ -72,7 +72,7 @@ async function callOpenAI(messages, retryCount = 0) {
             model: OPENAI_MODEL,
             messages,
             max_tokens: 2048,
-            temperature: 0.7,
+            temperature: temperature,
             response_format: { type: "json_object" },
         }),
     });
@@ -86,7 +86,7 @@ async function callOpenAI(messages, retryCount = 0) {
         
         console.log(`[Rate Limit] Ожидание ${delay}ms перед повторной попыткой (${retryCount + 1}/${MAX_RETRIES})...`);
         await sleep(delay);
-        return callOpenAI(messages, retryCount + 1);
+        return callOpenAI(messages, temperature, retryCount + 1);
     }
 
     return response;
@@ -114,7 +114,11 @@ app.post('/api/chat', async (req, res) => {
             });
         }
 
-        const { message, history = [], systemPrompt } = req.body;
+        const { message, history = [], systemPrompt, temperature } = req.body;
+        
+        // Валидация и ограничение temperature (0-2 для OpenAI)
+        const parsedTemp = parseFloat(temperature);
+        const validTemperature = isNaN(parsedTemp) ? 0.7 : Math.min(2, Math.max(0, parsedTemp));
 
         // Валидация
         if (!message || typeof message !== 'string') {
@@ -126,7 +130,15 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // Используем переданный systemPrompt или дефолтный
-        const activeSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+        let activeSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+        
+        // OpenAI требует упоминание "json" в сообщениях при использовании response_format: json_object
+        // Если в system prompt нет слова "json", добавляем инструкцию автоматически
+        if (!activeSystemPrompt.toLowerCase().includes('json')) {
+            activeSystemPrompt += `\n\nОтвет возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
+{"message": "сообщение пользователя", "answer": "твой ответ"}
+Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`;
+        }
         
         // Логируем используемый System Prompt
         console.log('\n' + '~'.repeat(60));
@@ -155,7 +167,7 @@ app.post('/api/chat', async (req, res) => {
             model: OPENAI_MODEL,
             messages,
             max_tokens: 2048,
-            temperature: 0.7,
+            temperature: validTemperature,
             response_format: { type: "json_object" },
         };
         
@@ -167,7 +179,7 @@ app.post('/api/chat', async (req, res) => {
         console.log('='.repeat(60) + '\n');
 
         // Запрос к OpenAI API с автоматическим retry
-        const response = await callOpenAI(messages);
+        const response = await callOpenAI(messages, validTemperature);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));

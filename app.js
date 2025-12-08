@@ -25,6 +25,8 @@ const systemPromptTextarea = document.getElementById('system-prompt-textarea');
 const applyPromptBtn = document.getElementById('apply-prompt-btn');
 const promptStatus = document.getElementById('prompt-status');
 
+// Temperature элементы получаются динамически при необходимости
+
 // ===== История сообщений =====
 let conversationHistory = [];
 let isWaitingForResponse = false;
@@ -130,6 +132,7 @@ const SYSTEM_PROMPT_PRESETS = {
 
 let currentSystemPrompt = SYSTEM_PROMPT_PRESETS.hookah.prompt;
 let currentPresetName = 'Кальянщик';
+let currentTemperature = 0.7;
 
 // Пользовательские пресеты (загружаются из localStorage)
 let customPresets = {};
@@ -175,11 +178,28 @@ function loadSystemPromptFromStorage() {
     try {
         const savedPrompt = localStorage.getItem('goragent_system_prompt');
         const savedName = localStorage.getItem('goragent_preset_name');
+        const savedTemp = localStorage.getItem('goragent_temperature');
+        
         if (savedPrompt) {
             currentSystemPrompt = savedPrompt;
             currentPresetName = savedName || 'Пользовательский';
             updatePromptStatus();
         }
+        
+        if (savedTemp) {
+            const parsedTemp = parseFloat(savedTemp);
+            if (!isNaN(parsedTemp) && parsedTemp >= 0 && parsedTemp <= 2) {
+                currentTemperature = parsedTemp;
+            }
+        }
+        
+        // Обновляем UI слайдера
+        const slider = document.getElementById('temperature-slider');
+        const valueDisplay = document.getElementById('temperature-value');
+        if (slider) slider.value = currentTemperature;
+        if (valueDisplay) valueDisplay.textContent = currentTemperature.toFixed(1);
+        
+        console.log('Загруженный temperature:', currentTemperature);
     } catch (e) {
         console.warn('Не удалось загрузить System Prompt:', e);
     }
@@ -331,8 +351,27 @@ settingsBtn.addEventListener('click', () => {
     selectedPresetName = currentPresetName;
     document.body.style.overflow = 'hidden';
     
+    // Установить текущее значение temperature
+    const slider = document.getElementById('temperature-slider');
+    const valueDisplay = document.getElementById('temperature-value');
+    if (slider) slider.value = currentTemperature;
+    if (valueDisplay) valueDisplay.textContent = currentTemperature.toFixed(1);
+    
     // Сбросить подсветку кнопок пресетов
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+});
+
+// Temperature slider - добавляем обработчик после загрузки DOM
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('temperature-slider');
+    const valueDisplay = document.getElementById('temperature-value');
+    
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            if (valueDisplay) valueDisplay.textContent = value.toFixed(1);
+        });
+    }
 });
 
 function closePanel() {
@@ -349,22 +388,40 @@ let selectedPresetName = 'Кальянщик';
 // Применить новый System Prompt
 applyPromptBtn.addEventListener('click', () => {
     const newPrompt = systemPromptTextarea.value.trim();
+    const slider = document.getElementById('temperature-slider');
+    const newTemperature = slider ? parseFloat(slider.value) : currentTemperature;
+    
+    console.log('Слайдер найден:', !!slider);
+    console.log('Значение слайдера:', slider?.value);
+    console.log('Новый temperature:', newTemperature);
+    
     if (newPrompt) {
         currentSystemPrompt = newPrompt;
         currentPresetName = selectedPresetName;
+        currentTemperature = newTemperature;
         updatePromptStatus();
+        
+        // Сохраняем temperature
+        localStorage.setItem('goragent_temperature', currentTemperature.toString());
+        
+        // Очищаем историю чата (не учитываем прошлый контекст при смене роли/температуры)
+        conversationHistory = [];
+        chatEl.innerHTML = '';
+        localStorage.removeItem('goragent_history');
+        localStorage.removeItem('goragent_conversation');
         
         // Логируем изменение
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
-        console.log('%c⚙️ SYSTEM PROMPT ИЗМЕНЁН', 'color: #FF9800; font-weight: bold; font-size: 14px');
+        console.log('%c⚙️ НАСТРОЙКИ ИЗМЕНЕНЫ (история очищена)', 'color: #FF9800; font-weight: bold; font-size: 14px');
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
         console.log('Режим:', currentPresetName);
+        console.log('Temperature:', currentTemperature);
         console.log('Новый System Prompt:');
         console.log(currentSystemPrompt);
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
         
         // Показать уведомление
-        addMessage(`✅ **System Prompt обновлён!**\n\nРежим: **${currentPresetName}**\n\nТеперь агент будет вести себя по-новому. Продолжите диалог, чтобы увидеть изменения.`, 'agent');
+        addMessage(`✅ **Настройки обновлены!**\n\nРежим: **${currentPresetName}**\nTemperature: **${currentTemperature}**\n\n🔄 История чата очищена. Начните новый диалог!`, 'agent');
     }
     closePanel();
 });
@@ -550,11 +607,13 @@ async function sendToApi(message) {
     setUILoading(true);
     
     try {
-        // Формируем запрос с System Prompt
+        // Формируем запрос с System Prompt и Temperature
+        console.log('Отправляем temperature:', currentTemperature);
         const requestBody = {
             message,
             history: conversationHistory.slice(-20), // Последние 20 сообщений для контекста
-            systemPrompt: currentSystemPrompt // Передаём текущий System Prompt
+            systemPrompt: currentSystemPrompt, // Передаём текущий System Prompt
+            temperature: currentTemperature // Передаём текущий Temperature
         };
         
         // Логируем запрос в консоль браузера

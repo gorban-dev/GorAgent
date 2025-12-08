@@ -103,6 +103,26 @@
                     </button>
                 </div>
                 <div class="panel-body">
+                    <!-- Temperature Slider -->
+                    <div class="temperature-control">
+                        <div class="temperature-header">
+                            <label for="temperature-slider">🌡️ Temperature</label>
+                            <span class="temperature-value" id="temperature-value">0.7</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            id="temperature-slider" 
+                            min="0" 
+                            max="2" 
+                            step="0.1" 
+                            value="0.7"
+                        />
+                        <div class="temperature-labels">
+                            <span>Точный (0)</span>
+                            <span>Креативный (2)</span>
+                        </div>
+                    </div>
+                    
                     <label for="system-prompt-textarea">Задайте поведение агента:</label>
                     <textarea 
                         id="system-prompt-textarea" 
