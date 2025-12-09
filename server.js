@@ -17,7 +17,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // ===== Конфигурация OpenRouter =====
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Доступные модели OpenRouter
