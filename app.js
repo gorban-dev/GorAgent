@@ -1,12 +1,19 @@
 /**
- * GorAgent — ИИ Чат на базе OpenAI API
+ * GorAgent — ИИ Чат на базе OpenAI API и OpenRouter
  * Фронтенд логика
  */
 
 // ===== Конфигурация =====
-const MODEL_NAME = 'gpt-4.1-mini';
-const API_ENDPOINT = '/api/chat';
+const OPENAI_MODEL_NAME = 'gpt-4.1-mini';
+const API_ENDPOINTS = {
+    openai: '/api/chat',
+    openrouter: '/api/chat/openrouter'
+};
 const MAX_MESSAGE_LENGTH = 3000;
+
+// Текущий провайдер API и модель
+let currentApiProvider = 'openai';
+let currentOpenRouterModel = 'anthropic/claude-sonnet-4';
 
 // ===== DOM Элементы =====
 const chatEl = document.getElementById('chat');
@@ -145,10 +152,11 @@ const customPresetsContainer = document.getElementById('custom-presets');
 
 // ===== Инициализация =====
 document.addEventListener('DOMContentLoaded', () => {
+    // Загрузить настройки API провайдера
+    loadApiProviderSettings();
+    
     // Установить название модели
-    if (modelNameEl) {
-        modelNameEl.textContent = MODEL_NAME;
-    }
+    updateModelNameDisplay();
     
     // Загрузить историю из localStorage
     loadConversationFromStorage();
@@ -158,6 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Загрузить пользовательские пресеты
     loadCustomPresets();
+    
+    // Инициализировать обработчики переключения API
+    initApiProviderHandlers();
     
     // Если история пуста, показать приветственное сообщение
     if (conversationHistory.length === 0) {
@@ -170,6 +181,131 @@ document.addEventListener('DOMContentLoaded', () => {
     // Авто-ресайз textarea
     setupTextareaAutoResize();
 });
+
+/**
+ * Обновить отображение названия модели в хедере
+ */
+function updateModelNameDisplay() {
+    if (modelNameEl) {
+        if (currentApiProvider === 'openai') {
+            modelNameEl.textContent = OPENAI_MODEL_NAME;
+        } else {
+            // Для OpenRouter показываем короткое название модели
+            const modelParts = currentOpenRouterModel.split('/');
+            modelNameEl.textContent = modelParts[1] || currentOpenRouterModel;
+        }
+    }
+}
+
+/**
+ * Загрузка настроек API провайдера из localStorage
+ */
+function loadApiProviderSettings() {
+    try {
+        const savedProvider = localStorage.getItem('goragent_api_provider');
+        const savedModel = localStorage.getItem('goragent_openrouter_model');
+        
+        if (savedProvider && (savedProvider === 'openai' || savedProvider === 'openrouter')) {
+            currentApiProvider = savedProvider;
+        }
+        
+        if (savedModel) {
+            currentOpenRouterModel = savedModel;
+        }
+        
+        console.log('Загруженные настройки API:', { provider: currentApiProvider, model: currentOpenRouterModel });
+    } catch (e) {
+        console.warn('Не удалось загрузить настройки API провайдера:', e);
+    }
+}
+
+/**
+ * Сохранение настроек API провайдера в localStorage
+ */
+function saveApiProviderSettings() {
+    try {
+        localStorage.setItem('goragent_api_provider', currentApiProvider);
+        localStorage.setItem('goragent_openrouter_model', currentOpenRouterModel);
+    } catch (e) {
+        console.warn('Не удалось сохранить настройки API провайдера:', e);
+    }
+}
+
+/**
+ * Инициализация обработчиков переключения API
+ */
+function initApiProviderHandlers() {
+    const apiTabs = document.querySelectorAll('.api-tab');
+    const openrouterSettings = document.getElementById('openrouter-settings');
+    const modelSelect = document.getElementById('openrouter-model');
+    const apiStatus = document.getElementById('api-status');
+    
+    // Установить начальное состояние UI
+    apiTabs.forEach(tab => {
+        if (tab.dataset.provider === currentApiProvider) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+    
+    // Показать/скрыть настройки OpenRouter
+    if (openrouterSettings) {
+        openrouterSettings.hidden = currentApiProvider !== 'openrouter';
+    }
+    
+    // Установить выбранную модель
+    if (modelSelect) {
+        modelSelect.value = currentOpenRouterModel;
+    }
+    
+    // Обновить статус API
+    updateApiStatusBadge();
+    
+    // Обработчики кликов по табам
+    apiTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const provider = tab.dataset.provider;
+            
+            // Обновить активный таб
+            apiTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Показать/скрыть настройки OpenRouter
+            if (openrouterSettings) {
+                openrouterSettings.hidden = provider !== 'openrouter';
+            }
+            
+            // Сохранить выбранный провайдер (применится при нажатии "Применить")
+            currentApiProvider = provider;
+            updateApiStatusBadge();
+        });
+    });
+    
+    // Обработчик выбора модели
+    if (modelSelect) {
+        modelSelect.addEventListener('change', (e) => {
+            currentOpenRouterModel = e.target.value;
+        });
+    }
+}
+
+/**
+ * Обновить бейдж статуса API в футере панели
+ */
+function updateApiStatusBadge() {
+    const apiStatus = document.getElementById('api-status');
+    if (apiStatus) {
+        if (currentApiProvider === 'openai') {
+            apiStatus.textContent = '🟢 OpenAI';
+            apiStatus.className = 'api-status-badge openai';
+        } else {
+            const modelParts = currentOpenRouterModel.split('/');
+            apiStatus.textContent = `🌐 ${modelParts[1] || 'OpenRouter'}`;
+            apiStatus.className = 'api-status-badge openrouter';
+        }
+    }
+}
 
 /**
  * Загрузка System Prompt из localStorage
@@ -357,6 +493,29 @@ settingsBtn.addEventListener('click', () => {
     if (slider) slider.value = currentTemperature;
     if (valueDisplay) valueDisplay.textContent = currentTemperature.toFixed(1);
     
+    // Установить текущий API провайдер
+    const apiTabs = document.querySelectorAll('.api-tab');
+    const openrouterSettings = document.getElementById('openrouter-settings');
+    const modelSelect = document.getElementById('openrouter-model');
+    
+    apiTabs.forEach(tab => {
+        if (tab.dataset.provider === currentApiProvider) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+    
+    if (openrouterSettings) {
+        openrouterSettings.hidden = currentApiProvider !== 'openrouter';
+    }
+    
+    if (modelSelect) {
+        modelSelect.value = currentOpenRouterModel;
+    }
+    
+    updateApiStatusBadge();
+    
     // Сбросить подсветку кнопок пресетов
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
 });
@@ -390,19 +549,32 @@ applyPromptBtn.addEventListener('click', () => {
     const newPrompt = systemPromptTextarea.value.trim();
     const slider = document.getElementById('temperature-slider');
     const newTemperature = slider ? parseFloat(slider.value) : currentTemperature;
+    const modelSelect = document.getElementById('openrouter-model');
     
     console.log('Слайдер найден:', !!slider);
     console.log('Значение слайдера:', slider?.value);
     console.log('Новый temperature:', newTemperature);
+    console.log('API провайдер:', currentApiProvider);
     
     if (newPrompt) {
         currentSystemPrompt = newPrompt;
         currentPresetName = selectedPresetName;
         currentTemperature = newTemperature;
+        
+        // Сохраняем выбранную модель OpenRouter
+        if (modelSelect && currentApiProvider === 'openrouter') {
+            currentOpenRouterModel = modelSelect.value;
+        }
+        
         updatePromptStatus();
         
-        // Сохраняем temperature
+        // Сохраняем настройки
         localStorage.setItem('goragent_temperature', currentTemperature.toString());
+        saveApiProviderSettings();
+        
+        // Обновляем отображение модели в хедере
+        updateModelNameDisplay();
+        updateApiStatusBadge();
         
         // Очищаем историю чата (не учитываем прошлый контекст при смене роли/температуры)
         conversationHistory = [];
@@ -416,12 +588,21 @@ applyPromptBtn.addEventListener('click', () => {
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
         console.log('Режим:', currentPresetName);
         console.log('Temperature:', currentTemperature);
+        console.log('API провайдер:', currentApiProvider);
+        if (currentApiProvider === 'openrouter') {
+            console.log('OpenRouter модель:', currentOpenRouterModel);
+        }
         console.log('Новый System Prompt:');
         console.log(currentSystemPrompt);
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
         
+        // Формируем сообщение с информацией о настройках
+        const providerInfo = currentApiProvider === 'openai' 
+            ? 'API: **OpenAI**' 
+            : `API: **OpenRouter**\nМодель: **${currentOpenRouterModel}**`;
+        
         // Показать уведомление
-        addMessage(`✅ **Настройки обновлены!**\n\nРежим: **${currentPresetName}**\nTemperature: **${currentTemperature}**\n\n🔄 История чата очищена. Начните новый диалог!`, 'agent');
+        addMessage(`✅ **Настройки обновлены!**\n\nРежим: **${currentPresetName}**\nTemperature: **${currentTemperature}**\n${providerInfo}\n\n🔄 История чата очищена. Начните новый диалог!`, 'agent');
     }
     closePanel();
 });
@@ -570,8 +751,40 @@ function addMessage(text, sender, isWelcome = false) {
  * Форматирование текста сообщения (Markdown-подобное)
  */
 function formatMessage(text) {
-    // Экранировать HTML
-    let formatted = text
+    // Сначала обрабатываем details блоки (до экранирования HTML)
+    let formatted = text;
+    
+    // Обработка <details> блоков с JSON
+    formatted = formatted.replace(/<details>\n?([\s\S]*?)\n?<\/details>/g, (match, content) => {
+        // Обрабатываем содержимое details отдельно
+        let detailsContent = content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        // Код блоки внутри details
+        detailsContent = detailsContent.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+            return `<pre><code>${code.trim()}</code></pre>`;
+        });
+        
+        // Жирный текст
+        detailsContent = detailsContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // Переносы
+        detailsContent = detailsContent.replace(/\n/g, '<br>');
+        
+        return `<details class="json-details"><summary>📄 Показать сырой JSON</summary><div class="details-content">${detailsContent}</div></details>`;
+    });
+    
+    // Экранировать HTML (для остального текста)
+    // Пропускаем уже обработанные details
+    const detailsBlocks = [];
+    formatted = formatted.replace(/<details class="json-details">[\s\S]*?<\/details>/g, (match) => {
+        detailsBlocks.push(match);
+        return `__DETAILS_BLOCK_${detailsBlocks.length - 1}__`;
+    });
+    
+    formatted = formatted
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
@@ -593,8 +806,16 @@ function formatMessage(text) {
     // Ссылки [text](url)
     formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     
+    // Горизонтальный разделитель ---
+    formatted = formatted.replace(/\n---\n/g, '<hr>');
+    
     // Переносы строк
     formatted = formatted.replace(/\n/g, '<br>');
+    
+    // Восстанавливаем details блоки
+    detailsBlocks.forEach((block, i) => {
+        formatted = formatted.replace(`__DETAILS_BLOCK_${i}__`, block);
+    });
     
     return formatted;
 }
@@ -607,8 +828,13 @@ async function sendToApi(message) {
     setUILoading(true);
     
     try {
+        // Определяем эндпоинт в зависимости от провайдера
+        const endpoint = API_ENDPOINTS[currentApiProvider];
+        
         // Формируем запрос с System Prompt и Temperature
         console.log('Отправляем temperature:', currentTemperature);
+        console.log('API провайдер:', currentApiProvider);
+        
         const requestBody = {
             message,
             history: conversationHistory.slice(-20), // Последние 20 сообщений для контекста
@@ -616,15 +842,27 @@ async function sendToApi(message) {
             temperature: currentTemperature // Передаём текущий Temperature
         };
         
+        // Если используется OpenRouter, добавляем модель
+        if (currentApiProvider === 'openrouter') {
+            requestBody.model = currentOpenRouterModel;
+        }
+        
         // Логируем запрос в консоль браузера
-        console.log('%c═══════════════════════════════════════════════════════', 'color: #4CAF50');
-        console.log('%c📤 ЗАПРОС К СЕРВЕРУ', 'color: #4CAF50; font-weight: bold; font-size: 14px');
-        console.log('%c═══════════════════════════════════════════════════════', 'color: #4CAF50');
+        const providerColor = currentApiProvider === 'openai' ? '#4CAF50' : '#9C27B0';
+        const providerName = currentApiProvider === 'openai' ? 'OpenAI' : 'OpenRouter';
+        
+        console.log(`%c═══════════════════════════════════════════════════════`, `color: ${providerColor}`);
+        console.log(`%c📤 ЗАПРОС К ${providerName}`, `color: ${providerColor}; font-weight: bold; font-size: 14px`);
+        console.log(`%c═══════════════════════════════════════════════════════`, `color: ${providerColor}`);
+        console.log('Эндпоинт:', endpoint);
+        if (currentApiProvider === 'openrouter') {
+            console.log('Модель:', currentOpenRouterModel);
+        }
         console.log('Структура запроса:');
         console.log(requestBody);
-        console.log('%c───────────────────────────────────────────────────────', 'color: #4CAF50');
+        console.log(`%c───────────────────────────────────────────────────────`, `color: ${providerColor}`);
         
-        const response = await fetch(API_ENDPOINT, {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -639,9 +877,16 @@ async function sendToApi(message) {
         
         const data = await response.json();
         
+        // Извлекаем метаданные
+        const meta = data._meta || {};
+        const responseTime = meta.responseTime || 0;
+        const tokens = meta.tokens || {};
+        const cost = meta.cost || 0;
+        const model = meta.model || '';
+        
         // Логируем ответ в консоль браузера
         console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
-        console.log('%c📥 ОТВЕТ ОТ СЕРВЕРА', 'color: #2196F3; font-weight: bold; font-size: 14px');
+        console.log(`%c📥 ОТВЕТ ОТ ${providerName}`, 'color: #2196F3; font-weight: bold; font-size: 14px');
         console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
         console.log('Сырой JSON ответ:');
         console.log(data);
@@ -649,16 +894,33 @@ async function sendToApi(message) {
         console.log('Распарсенные поля:');
         console.log('  message:', data.message);
         console.log('  answer:', data.answer);
+        console.log('  _meta:', meta);
         console.log('%c═══════════════════════════════════════════════════════', 'color: #2196F3');
         
         // Ответ приходит в формате { message: "...", answer: "..." }
         const agentReply = data.answer || data.reply || 'Не удалось получить ответ.';
         
-        // Форматируем JSON для красивого отображения
-        const jsonString = JSON.stringify(data, null, 2);
+        // Форматируем JSON для красивого отображения (без _meta для чистоты)
+        const displayData = { message: data.message, answer: data.answer };
+        const jsonString = JSON.stringify(displayData, null, 2);
         
-        // Показываем сырой JSON ответ
-        const jsonMessage = `**Ответ в формате JSON:**\n\`\`\`json\n${jsonString}\n\`\`\`\n\n**Человекочитаемый ответ на сообщение:**\n${agentReply}`;
+        // Формируем строку с метаданными
+        const formatTime = (ms) => {
+            if (ms < 1000) return `${ms}ms`;
+            return `${(ms / 1000).toFixed(2)}s`;
+        };
+        
+        const formatCost = (cost) => {
+            if (cost < 0.0001) return `$${cost.toFixed(8)}`;
+            if (cost < 0.01) return `$${cost.toFixed(6)}`;
+            return `$${cost.toFixed(4)}`;
+        };
+        
+        // Создаём компактный блок метаданных
+        const metaInfo = `⏱️ **${formatTime(responseTime)}** | 🔢 **${tokens.total || 0}** токенов | 💰 **${formatCost(cost)}** | 🤖 ${model}`;
+        
+        // Показываем ответ с метаданными
+        const jsonMessage = `${agentReply}\n\n---\n\n${metaInfo}\n\n<details>\n**Сырой JSON:**\n\`\`\`json\n${jsonString}\n\`\`\`\n</details>`;
         
         // Добавить ответ агента
         addMessage(jsonMessage, 'agent');

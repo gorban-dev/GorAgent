@@ -103,6 +103,46 @@
                     </button>
                 </div>
                 <div class="panel-body">
+                    <!-- API Provider Selector -->
+                    <div class="api-provider-section">
+                        <div class="api-provider-header">
+                            <label>🔌 API Провайдер</label>
+                        </div>
+                        <div class="api-provider-tabs">
+                            <button type="button" class="api-tab active" data-provider="openai">
+                                <span class="api-tab-icon">🟢</span>
+                                <span class="api-tab-name">OpenAI</span>
+                            </button>
+                            <button type="button" class="api-tab" data-provider="openrouter">
+                                <span class="api-tab-icon">🌐</span>
+                                <span class="api-tab-name">OpenRouter</span>
+                            </button>
+                        </div>
+                        
+                        <!-- OpenRouter Model Selector (hidden by default) -->
+                        <div class="openrouter-settings" id="openrouter-settings" hidden>
+                            <div class="model-selector">
+                                <label for="openrouter-model">🤖 Выберите модель:</label>
+                                <select id="openrouter-model" class="model-select">
+                                    <option value="anthropic/claude-sonnet-4">Claude Sonnet 4 (Anthropic)</option>
+                                    <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku (Anthropic)</option>
+                                    <option value="openai/gpt-4o">GPT-4o (OpenAI)</option>
+                                    <option value="openai/gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
+                                    <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash (Google)</option>
+                                    <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro Preview (Google)</option>
+                                    <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (Meta)</option>
+                                    <option value="mistralai/mistral-large-2411">Mistral Large 24.11</option>
+                                    <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+                                    <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B (Alibaba)</option>
+                                </select>
+                            </div>
+                            <div class="model-info">
+                                <span class="model-info-icon">💡</span>
+                                <span class="model-info-text">OpenRouter предоставляет доступ к различным AI моделям через единый API</span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Temperature Slider -->
                     <div class="temperature-control">
                         <div class="temperature-header">
@@ -165,6 +205,7 @@
                 <div class="panel-footer">
                     <div class="current-prompt-info">
                         <span id="prompt-status">📝 Текущий промпт: <strong>Кальянщик</strong></span>
+                        <span id="api-status" class="api-status-badge">🟢 OpenAI</span>
                     </div>
                     <button id="apply-prompt-btn" type="button" class="apply-btn">Применить</button>
                 </div>
