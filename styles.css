@@ -791,6 +791,63 @@ body {
     color: var(--text-muted);
 }
 
+/* ===== Max Tokens Control ===== */
+.max-tokens-control {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    margin-bottom: 8px;
+}
+
+.max-tokens-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.max-tokens-header label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.max-tokens-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.max-tokens-input:focus {
+    outline: none;
+    border-color: var(--border-glow);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.max-tokens-input::-webkit-inner-spin-button,
+.max-tokens-input::-webkit-outer-spin-button {
+    opacity: 1;
+    height: 24px;
+}
+
+.max-tokens-hint {
+    display: flex;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 #system-prompt-textarea {
     width: 100%;
     min-height: 200px;

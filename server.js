@@ -91,7 +91,7 @@ async function callOpenAI(messages, temperature = 0.7, retryCount = 0) {
             messages,
             max_tokens: 8192,
             temperature: temperature,
-            response_format: { type: "json_object" },
+            //response_format: { type: "json_object" },
         }),
     });
 
@@ -169,11 +169,15 @@ app.post('/api/chat', async (req, res) => {
             });
         }
 
-        const { message, history = [], systemPrompt, temperature } = req.body;
+        const { message, history = [], systemPrompt, temperature, maxTokens } = req.body;
         
         // Валидация и ограничение temperature (0-2 для OpenAI)
         const parsedTemp = parseFloat(temperature);
         const validTemperature = isNaN(parsedTemp) ? 0.7 : Math.min(2, Math.max(0, parsedTemp));
+        
+        // Валидация и ограничение max_tokens
+        const parsedMaxTokens = parseInt(maxTokens);
+        const validMaxTokens = isNaN(parsedMaxTokens) ? 2048 : Math.min(16384, Math.max(256, parsedMaxTokens));
 
         // Валидация
         if (!message || typeof message !== 'string') {
@@ -190,9 +194,7 @@ app.post('/api/chat', async (req, res) => {
         // OpenAI требует упоминание "json" в сообщениях при использовании response_format: json_object
         // Если в system prompt нет слова "json", добавляем инструкцию автоматически
         if (!activeSystemPrompt.toLowerCase().includes('json')) {
-            activeSystemPrompt += `\n\nОтвет возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
-{"message": "сообщение пользователя", "answer": "твой ответ"}
-Где message - это сообщение от пользователя, answer - это твой ответ на это сообщение.`;
+            //activeSystemPrompt += ;
         }
         
         // Логируем используемый System Prompt
@@ -221,9 +223,9 @@ app.post('/api/chat', async (req, res) => {
         const requestBody = {
             model: OPENAI_MODEL,
             messages,
-            max_tokens: 2048,
+            max_tokens: validMaxTokens,
             temperature: validTemperature,
-            response_format: { type: "json_object" },
+            //response_format: { type: "json_object" },
         };
         
         console.log('\n' + '='.repeat(60));
@@ -321,7 +323,8 @@ app.post('/api/chat', async (req, res) => {
                 },
                 cost: totalCost,
                 model: OPENAI_MODEL,
-                provider: 'openai'
+                provider: 'openai',
+                maxTokens: validMaxTokens
             }
         });
 
@@ -343,7 +346,7 @@ app.post('/api/chat/openrouter', async (req, res) => {
             });
         }
 
-        const { message, history = [], systemPrompt, temperature, model } = req.body;
+        const { message, history = [], systemPrompt, temperature, model, maxTokens } = req.body;
         
         // Валидация модели
         const selectedModel = model || 'anthropic/claude-sonnet-4';
@@ -351,6 +354,10 @@ app.post('/api/chat/openrouter', async (req, res) => {
         // Валидация и ограничение temperature (0-2)
         const parsedTemp = parseFloat(temperature);
         const validTemperature = isNaN(parsedTemp) ? 0.7 : Math.min(2, Math.max(0, parsedTemp));
+        
+        // Валидация и ограничение max_tokens
+        const parsedMaxTokens = parseInt(maxTokens);
+        const validMaxTokens = isNaN(parsedMaxTokens) ? 2048 : Math.min(16384, Math.max(256, parsedMaxTokens));
 
         // Валидация
         if (!message || typeof message !== 'string') {
@@ -395,7 +402,7 @@ app.post('/api/chat/openrouter', async (req, res) => {
         const requestBody = {
             model: selectedModel,
             messages,
-            max_tokens: 2048,
+            max_tokens: validMaxTokens,
             temperature: validTemperature,
         };
         
@@ -515,7 +522,8 @@ app.post('/api/chat/openrouter', async (req, res) => {
                 },
                 cost: totalCost,
                 model: selectedModel,
-                provider: 'openrouter'
+                provider: 'openrouter',
+                maxTokens: validMaxTokens
             }
         });
 

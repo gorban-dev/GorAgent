@@ -163,6 +163,25 @@
                         </div>
                     </div>
                     
+                    <!-- Max Tokens Control -->
+                    <div class="max-tokens-control">
+                        <div class="max-tokens-header">
+                            <label for="max-tokens-input">📊 Max Tokens</label>
+                        </div>
+                        <input 
+                            type="number" 
+                            id="max-tokens-input" 
+                            min="256" 
+                            max="16384" 
+                            step="1" 
+                            value="2048"
+                            class="max-tokens-input"
+                        />
+                        <div class="max-tokens-hint">
+                            <span>от 256 до 16384</span>
+                        </div>
+                    </div>
+                    
                     <label for="system-prompt-textarea">Задайте поведение агента:</label>
                     <textarea 
                         id="system-prompt-textarea" 

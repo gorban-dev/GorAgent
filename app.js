@@ -140,6 +140,7 @@ const SYSTEM_PROMPT_PRESETS = {
 let currentSystemPrompt = SYSTEM_PROMPT_PRESETS.hookah.prompt;
 let currentPresetName = 'Кальянщик';
 let currentTemperature = 0.7;
+let currentMaxTokens = 2048;
 
 // Пользовательские пресеты (загружаются из localStorage)
 let customPresets = {};
@@ -329,13 +330,26 @@ function loadSystemPromptFromStorage() {
             }
         }
         
-        // Обновляем UI слайдера
+        const savedMaxTokens = localStorage.getItem('goragent_max_tokens');
+        if (savedMaxTokens) {
+            const parsedMaxTokens = parseInt(savedMaxTokens);
+            if (!isNaN(parsedMaxTokens) && parsedMaxTokens >= 256 && parsedMaxTokens <= 16384) {
+                currentMaxTokens = parsedMaxTokens;
+            }
+        }
+        
+        // Обновляем UI слайдера temperature
         const slider = document.getElementById('temperature-slider');
         const valueDisplay = document.getElementById('temperature-value');
         if (slider) slider.value = currentTemperature;
         if (valueDisplay) valueDisplay.textContent = currentTemperature.toFixed(1);
         
+        // Обновляем UI поля max_tokens
+        const maxTokensInput = document.getElementById('max-tokens-input');
+        if (maxTokensInput) maxTokensInput.value = currentMaxTokens;
+        
         console.log('Загруженный temperature:', currentTemperature);
+        console.log('Загруженный max_tokens:', currentMaxTokens);
     } catch (e) {
         console.warn('Не удалось загрузить System Prompt:', e);
     }
@@ -493,6 +507,10 @@ settingsBtn.addEventListener('click', () => {
     if (slider) slider.value = currentTemperature;
     if (valueDisplay) valueDisplay.textContent = currentTemperature.toFixed(1);
     
+    // Установить текущее значение max_tokens
+    const maxTokensInput = document.getElementById('max-tokens-input');
+    if (maxTokensInput) maxTokensInput.value = currentMaxTokens;
+    
     // Установить текущий API провайдер
     const apiTabs = document.querySelectorAll('.api-tab');
     const openrouterSettings = document.getElementById('openrouter-settings');
@@ -531,6 +549,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (valueDisplay) valueDisplay.textContent = value.toFixed(1);
         });
     }
+    
+    // Max Tokens input - валидация при изменении
+    const maxTokensInput = document.getElementById('max-tokens-input');
+    
+    if (maxTokensInput) {
+        maxTokensInput.addEventListener('change', (e) => {
+            let value = parseInt(e.target.value);
+            // Ограничиваем значение в допустимых пределах
+            if (isNaN(value) || value < 256) value = 256;
+            if (value > 16384) value = 16384;
+            e.target.value = value;
+        });
+    }
 });
 
 function closePanel() {
@@ -548,18 +579,26 @@ let selectedPresetName = 'Кальянщик';
 applyPromptBtn.addEventListener('click', () => {
     const newPrompt = systemPromptTextarea.value.trim();
     const slider = document.getElementById('temperature-slider');
+    const maxTokensInput = document.getElementById('max-tokens-input');
     const newTemperature = slider ? parseFloat(slider.value) : currentTemperature;
+    let newMaxTokens = maxTokensInput ? parseInt(maxTokensInput.value) : currentMaxTokens;
+    // Валидация max tokens
+    if (isNaN(newMaxTokens) || newMaxTokens < 256) newMaxTokens = 256;
+    if (newMaxTokens > 16384) newMaxTokens = 16384;
     const modelSelect = document.getElementById('openrouter-model');
     
-    console.log('Слайдер найден:', !!slider);
-    console.log('Значение слайдера:', slider?.value);
+    console.log('Слайдер temperature найден:', !!slider);
+    console.log('Значение слайдера temperature:', slider?.value);
     console.log('Новый temperature:', newTemperature);
+    console.log('Поле max_tokens найдено:', !!maxTokensInput);
+    console.log('Новый max_tokens:', newMaxTokens);
     console.log('API провайдер:', currentApiProvider);
     
     if (newPrompt) {
         currentSystemPrompt = newPrompt;
         currentPresetName = selectedPresetName;
         currentTemperature = newTemperature;
+        currentMaxTokens = newMaxTokens;
         
         // Сохраняем выбранную модель OpenRouter
         if (modelSelect && currentApiProvider === 'openrouter') {
@@ -570,6 +609,7 @@ applyPromptBtn.addEventListener('click', () => {
         
         // Сохраняем настройки
         localStorage.setItem('goragent_temperature', currentTemperature.toString());
+        localStorage.setItem('goragent_max_tokens', currentMaxTokens.toString());
         saveApiProviderSettings();
         
         // Обновляем отображение модели в хедере
@@ -588,6 +628,7 @@ applyPromptBtn.addEventListener('click', () => {
         console.log('%c═══════════════════════════════════════════════════════', 'color: #FF9800');
         console.log('Режим:', currentPresetName);
         console.log('Temperature:', currentTemperature);
+        console.log('Max Tokens:', currentMaxTokens);
         console.log('API провайдер:', currentApiProvider);
         if (currentApiProvider === 'openrouter') {
             console.log('OpenRouter модель:', currentOpenRouterModel);
@@ -602,7 +643,7 @@ applyPromptBtn.addEventListener('click', () => {
             : `API: **OpenRouter**\nМодель: **${currentOpenRouterModel}**`;
         
         // Показать уведомление
-        addMessage(`✅ **Настройки обновлены!**\n\nРежим: **${currentPresetName}**\nTemperature: **${currentTemperature}**\n${providerInfo}\n\n🔄 История чата очищена. Начните новый диалог!`, 'agent');
+        addMessage(`✅ **Настройки обновлены!**\n\nРежим: **${currentPresetName}**\nTemperature: **${currentTemperature}**\nMax Tokens: **${currentMaxTokens}**\n${providerInfo}\n\n🔄 История чата очищена. Начните новый диалог!`, 'agent');
     }
     closePanel();
 });
@@ -839,7 +880,8 @@ async function sendToApi(message) {
             message,
             history: conversationHistory.slice(-20), // Последние 20 сообщений для контекста
             systemPrompt: currentSystemPrompt, // Передаём текущий System Prompt
-            temperature: currentTemperature // Передаём текущий Temperature
+            temperature: currentTemperature, // Передаём текущий Temperature
+            maxTokens: currentMaxTokens // Передаём текущий Max Tokens
         };
         
         // Если используется OpenRouter, добавляем модель
@@ -916,8 +958,11 @@ async function sendToApi(message) {
             return `$${cost.toFixed(4)}`;
         };
         
-        // Создаём компактный блок метаданных
-        const metaInfo = `⏱️ **${formatTime(responseTime)}** | 🔢 **${tokens.total || 0}** токенов | 💰 **${formatCost(cost)}** | 🤖 ${model}`;
+        // Создаём компактный блок метаданных с детализацией токенов
+        const promptTokens = tokens.prompt || 0;
+        const completionTokens = tokens.completion || 0;
+        const totalTokens = tokens.total || 0;
+        const metaInfo = `⏱️ **${formatTime(responseTime)}** | 🔢 Токены: **${promptTokens}** prompt + **${completionTokens}** completion = **${totalTokens}** total | 💰 **${formatCost(cost)}** | 🤖 ${model}`;
         
         // Показываем ответ с метаданными
         const jsonMessage = `${agentReply}\n\n---\n\n${metaInfo}\n\n<details>\n**Сырой JSON:**\n\`\`\`json\n${jsonString}\n\`\`\`\n</details>`;
