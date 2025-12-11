@@ -38,6 +38,17 @@ const promptStatus = document.getElementById('prompt-status');
 let conversationHistory = [];
 let isWaitingForResponse = false;
 
+// ===== Сжатие истории =====
+let compressionEnabled = false;
+let compressionThreshold = 10;
+let compressionSummary = null; // Хранит текущее резюме сжатой истории
+let compressionStats = {
+    totalMessages: 0,
+    compressedTokens: 0,      // Токены сжатых сообщений (до сжатия)
+    summaryTokens: 0,         // Токены в резюме (после сжатия)
+    compressions: []
+};
+
 // ===== System Prompt =====
 const SYSTEM_PROMPT_PRESETS = {
     hookah: {
@@ -170,6 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Инициализировать обработчики переключения API
     initApiProviderHandlers();
+    
+    // Инициализировать обработчики сжатия истории
+    initCompressionHandlers();
     
     // Если история пуста, показать приветственное сообщение
     if (conversationHistory.length === 0) {
@@ -876,9 +890,12 @@ async function sendToApi(message) {
         console.log('Отправляем temperature:', currentTemperature);
         console.log('API провайдер:', currentApiProvider);
         
+        // Используем историю с учётом сжатия
+        const historyForApi = getHistoryForApi();
+        
         const requestBody = {
             message,
-            history: conversationHistory.slice(-20), // Последние 20 сообщений для контекста
+            history: historyForApi, // История с учётом сжатия
             systemPrompt: currentSystemPrompt, // Передаём текущий System Prompt
             temperature: currentTemperature, // Передаём текущий Temperature
             maxTokens: currentMaxTokens // Передаём текущий Max Tokens
@@ -970,6 +987,16 @@ async function sendToApi(message) {
         // Добавить ответ агента
         addMessage(jsonMessage, 'agent');
         conversationHistory.push({ role: 'assistant', content: agentReply });
+        
+        // Обновляем статистику
+        updateCompressionStats();
+        
+        // Проверяем нужно ли сжимать историю
+        if (compressionEnabled && conversationHistory.length >= compressionThreshold) {
+            console.log('%c📊 Достигнут порог сжатия!', 'color: #f59e0b; font-weight: bold');
+            // Небольшая задержка перед сжатием для UX
+            setTimeout(() => compressHistory(), 1000);
+        }
         
     } catch (error) {
         console.error('API Error:', error);
@@ -1079,11 +1106,370 @@ function restoreMessagesFromHistory() {
 function clearChat() {
     chatEl.innerHTML = '';
     conversationHistory = [];
+    
+    // Очищаем данные сжатия
+    compressionSummary = null;
+    compressionStats = {
+        totalMessages: 0,
+        compressedTokens: 0,
+        summaryTokens: 0,
+        compressions: []
+    };
+    
     localStorage.removeItem('goragent_history');
     localStorage.removeItem('goragent_conversation');
+    localStorage.removeItem('goragent_compression_summary');
+    localStorage.removeItem('goragent_compression_stats');
+    
+    // Обновляем UI статистики
+    updateCompressionStats();
+    renderCompressionHistory();
+    
     showWelcomeMessage();
+}
+
+// ===== Функции сжатия истории =====
+
+/**
+ * Оценка количества токенов (приблизительно)
+ */
+function estimateTokens(text) {
+    if (!text) return 0;
+    return Math.ceil(text.length / 3.5);
+}
+
+/**
+ * Подсчёт токенов во всей истории
+ */
+function calculateHistoryTokens(history) {
+    return history.reduce((total, msg) => total + estimateTokens(msg.content), 0);
+}
+
+/**
+ * Обновление статистики сжатия
+ */
+function updateCompressionStats() {
+    // Подсчёт текущих сообщений
+    const currentHistoryTokens = calculateHistoryTokens(conversationHistory);
+    const summaryTokens = compressionSummary ? estimateTokens(compressionSummary.summary) : 0;
+    
+    // Общее кол-во сообщений (текущие + сжатые)
+    const totalMessages = conversationHistory.length + (compressionSummary?.originalCount || 0);
+    
+    // Оригинальные токены = токены сжатых сообщений + токены текущих сообщений
+    // (сколько бы мы отправили БЕЗ сжатия)
+    const originalTokens = compressionStats.compressedTokens + currentHistoryTokens;
+    
+    // Текущие токены = резюме + текущие сообщения
+    // (сколько мы реально отправляем)
+    const currentTokens = summaryTokens + currentHistoryTokens;
+    
+    // Сэкономлено = разница между тем что было бы и тем что есть
+    // = сжатые токены - токены резюме
+    const savedTokens = Math.max(0, compressionStats.compressedTokens - summaryTokens);
+    
+    compressionStats.totalMessages = totalMessages;
+    compressionStats.summaryTokens = summaryTokens;
+
+    // Обновляем UI
+    const statMessages = document.getElementById('stat-messages');
+    const statOriginalTokens = document.getElementById('stat-original-tokens');
+    const statCurrentTokens = document.getElementById('stat-current-tokens');
+    const statSavedTokens = document.getElementById('stat-saved-tokens');
+
+    if (statMessages) statMessages.textContent = totalMessages;
+    if (statOriginalTokens) statOriginalTokens.textContent = originalTokens;
+    if (statCurrentTokens) statCurrentTokens.textContent = currentTokens;
+    
+    const savingsPercent = compressionStats.compressedTokens > 0 
+        ? ((savedTokens / compressionStats.compressedTokens) * 100).toFixed(0) 
+        : 0;
+    if (statSavedTokens) statSavedTokens.textContent = `${savedTokens} (${savingsPercent}%)`;
+}
+
+/**
+ * Сжатие истории диалога
+ */
+async function compressHistory(force = false) {
+    // Проверяем нужно ли сжимать
+    if (!compressionEnabled && !force) return false;
+    if (conversationHistory.length < compressionThreshold && !force) return false;
+    
+    console.log('%c🗜️ Начинаем сжатие истории...', 'color: #8b5cf6; font-weight: bold');
+    
+    try {
+        // Показываем индикатор сжатия
+        showCompressionIndicator(true);
+        
+        // Берём сообщения для сжатия (все кроме последних 2-3)
+        const keepRecent = 3;
+        const toCompress = conversationHistory.slice(0, -keepRecent);
+        const toKeep = conversationHistory.slice(-keepRecent);
+        
+        if (toCompress.length === 0) {
+            console.log('%c🗜️ Недостаточно сообщений для сжатия', 'color: #f59e0b');
+            showCompressionIndicator(false);
+            return false;
+        }
+        
+        // Если уже есть summary, добавляем его к сжимаемым данным
+        const historyToSend = compressionSummary 
+            ? [{ role: 'system', content: `Предыдущее резюме:\n${compressionSummary.summary}` }, ...toCompress]
+            : toCompress;
+        
+        // Подсчитываем токены сжимаемых сообщений
+        const tokensBeforeCompression = calculateHistoryTokens(toCompress);
+        
+        // Отправляем запрос на сжатие
+        const response = await fetch('/api/compress-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                history: historyToSend,
+                provider: currentApiProvider,
+                model: currentApiProvider === 'openrouter' ? currentOpenRouterModel : null
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Ошибка при сжатии истории');
+        }
+        
+        const result = await response.json();
+        
+if (result.success) {
+            // Сохраняем новое summary
+            compressionSummary = {
+                summary: result.summary,
+                originalCount: (compressionSummary?.originalCount || 0) + toCompress.length,
+                timestamp: new Date().toISOString()
+            };
+
+            // Обновляем историю - оставляем только недавние сообщения
+            conversationHistory = toKeep;
+            
+            // Накапливаем токены сжатых сообщений
+            compressionStats.compressedTokens += tokensBeforeCompression;
+
+            // Добавляем запись о сжатии
+            compressionStats.compressions.push({
+                time: new Date().toLocaleTimeString('ru-RU'),
+                messagesBefore: toCompress.length,
+                tokensBefore: tokensBeforeCompression,
+                tokensAfter: result.summaryTokens,
+                saved: result.tokensSaved
+            });
+            
+            // Обновляем статистику
+            updateCompressionStats();
+            
+            // Обновляем историю сжатий в UI
+            renderCompressionHistory();
+            
+            // Логируем результат
+            console.log('%c✅ История сжата!', 'color: #10b981; font-weight: bold');
+            console.log('Резюме:', result.summary);
+            console.log(`Токенов сэкономлено: ${result.tokensSaved} (${result.compressionRatio}%)`);
+            
+            // Сохраняем в localStorage
+            saveCompressionData();
+            
+            // Показываем уведомление в чате
+            addMessage(
+                `🗜️ **История сжата!**\n\n` +
+                `📊 Сжато сообщений: **${toCompress.length}**\n` +
+                `💾 Сэкономлено токенов: **${result.tokensSaved}** (${result.compressionRatio}%)\n\n` +
+                `_Контекст разговора сохранён в резюме._`,
+                'agent'
+            );
+            
+            showCompressionIndicator(false);
+            return true;
+        }
+    } catch (error) {
+        console.error('Ошибка сжатия:', error);
+        addMessage(`⚠️ Ошибка при сжатии истории: ${error.message}`, 'error');
+    }
+    
+    showCompressionIndicator(false);
+    return false;
+}
+
+/**
+ * Показать/скрыть индикатор сжатия
+ */
+function showCompressionIndicator(show) {
+    let indicator = document.getElementById('compression-indicator');
+    
+    if (show && !indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'compression-indicator';
+        indicator.className = 'compression-indicator';
+        indicator.innerHTML = `
+            <div class="compression-indicator-content">
+                <div class="compression-spinner"></div>
+                <span>Сжимаем историю...</span>
+            </div>
+        `;
+        document.body.appendChild(indicator);
+    } else if (!show && indicator) {
+        indicator.remove();
+    }
+}
+
+/**
+ * Отрисовка истории сжатий
+ */
+function renderCompressionHistory() {
+    const container = document.getElementById('compression-history');
+    const itemsContainer = document.getElementById('compression-history-items');
+    
+    if (!container || !itemsContainer) return;
+    
+    if (compressionStats.compressions.length === 0) {
+        container.hidden = true;
+        return;
+    }
+    
+    container.hidden = false;
+    itemsContainer.innerHTML = compressionStats.compressions.map((c, i) => `
+        <div class="history-item">
+            <span class="history-time">${c.time}</span>
+            <span class="history-detail">${c.messagesBefore} сообщ. → ${c.saved} токенов сэкономлено</span>
+        </div>
+    `).join('');
+}
+
+/**
+ * Сохранение данных сжатия в localStorage
+ */
+function saveCompressionData() {
+    try {
+        localStorage.setItem('goragent_compression_enabled', compressionEnabled.toString());
+        localStorage.setItem('goragent_compression_threshold', compressionThreshold.toString());
+        localStorage.setItem('goragent_compression_summary', JSON.stringify(compressionSummary));
+        localStorage.setItem('goragent_compression_stats', JSON.stringify(compressionStats));
+    } catch (e) {
+        console.warn('Не удалось сохранить данные сжатия:', e);
+    }
+}
+
+/**
+ * Загрузка данных сжатия из localStorage
+ */
+function loadCompressionData() {
+    try {
+        const enabled = localStorage.getItem('goragent_compression_enabled');
+        const threshold = localStorage.getItem('goragent_compression_threshold');
+        const summary = localStorage.getItem('goragent_compression_summary');
+        const stats = localStorage.getItem('goragent_compression_stats');
+
+        if (enabled !== null) compressionEnabled = enabled === 'true';
+        if (threshold !== null) compressionThreshold = parseInt(threshold) || 10;
+        if (summary) compressionSummary = JSON.parse(summary);
+        if (stats) {
+            const loadedStats = JSON.parse(stats);
+            // Миграция со старой структуры на новую
+            compressionStats = {
+                totalMessages: loadedStats.totalMessages || 0,
+                compressedTokens: loadedStats.compressedTokens || loadedStats.originalTokens || 0,
+                summaryTokens: loadedStats.summaryTokens || 0,
+                compressions: loadedStats.compressions || []
+            };
+        }
+        
+        // Обновляем UI
+        const enabledCheckbox = document.getElementById('compression-enabled');
+        const thresholdInput = document.getElementById('compression-threshold');
+        const settingsDiv = document.getElementById('compression-settings');
+        
+        if (enabledCheckbox) enabledCheckbox.checked = compressionEnabled;
+        if (thresholdInput) thresholdInput.value = compressionThreshold;
+        if (settingsDiv) settingsDiv.classList.toggle('active', compressionEnabled);
+        
+        updateCompressionStats();
+        renderCompressionHistory();
+        
+        console.log('Загружены настройки сжатия:', { compressionEnabled, compressionThreshold, hasSummary: !!compressionSummary });
+    } catch (e) {
+        console.warn('Не удалось загрузить данные сжатия:', e);
+    }
+}
+
+/**
+ * Инициализация обработчиков сжатия
+ */
+function initCompressionHandlers() {
+    const enabledCheckbox = document.getElementById('compression-enabled');
+    const thresholdInput = document.getElementById('compression-threshold');
+    const manualCompressBtn = document.getElementById('manual-compress-btn');
+    const settingsDiv = document.getElementById('compression-settings');
+    
+    if (enabledCheckbox) {
+        enabledCheckbox.addEventListener('change', (e) => {
+            compressionEnabled = e.target.checked;
+            if (settingsDiv) settingsDiv.classList.toggle('active', compressionEnabled);
+            saveCompressionData();
+            
+            console.log('%c⚙️ Сжатие ' + (compressionEnabled ? 'включено' : 'выключено'), 
+                       'color: #6366f1; font-weight: bold');
+        });
+    }
+    
+    if (thresholdInput) {
+        thresholdInput.addEventListener('change', (e) => {
+            compressionThreshold = Math.max(4, Math.min(30, parseInt(e.target.value) || 10));
+            e.target.value = compressionThreshold;
+            saveCompressionData();
+            
+            console.log('%c⚙️ Порог сжатия: ' + compressionThreshold + ' сообщений', 
+                       'color: #6366f1');
+        });
+    }
+    
+    if (manualCompressBtn) {
+        manualCompressBtn.addEventListener('click', async () => {
+            if (conversationHistory.length < 4) {
+                addMessage('⚠️ Недостаточно сообщений для сжатия (минимум 4)', 'error');
+                return;
+            }
+            
+            manualCompressBtn.disabled = true;
+            manualCompressBtn.textContent = '⏳ Сжимаем...';
+            
+            await compressHistory(true);
+            
+            manualCompressBtn.disabled = false;
+            manualCompressBtn.textContent = '🗜️ Сжать историю сейчас';
+        });
+    }
+    
+    // Загружаем сохранённые данные
+    loadCompressionData();
+}
+
+/**
+ * Получение истории для отправки в API (с учётом сжатия)
+ */
+function getHistoryForApi() {
+    let history = [];
+    
+    // Если есть сжатое резюме, добавляем его первым
+    if (compressionSummary) {
+        history.push({
+            role: 'system',
+            content: `[КОНТЕКСТ ПРЕДЫДУЩЕГО РАЗГОВОРА]\n${compressionSummary.summary}\n[КОНЕЦ КОНТЕКСТА]`
+        });
+    }
+    
+    // Добавляем текущую историю (последние сообщения)
+    history = history.concat(conversationHistory.slice(-20));
+    
+    return history;
 }
 
 // Экспорт для использования из консоли
 window.clearChat = clearChat;
+window.compressHistory = compressHistory;
+window.compressionStats = compressionStats;
 

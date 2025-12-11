@@ -38,6 +38,35 @@ const OPENROUTER_MODELS = {
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 секунда
 
+// ===== Конфигурация сжатия истории =====
+const COMPRESSION_THRESHOLD = 10; // Каждые N сообщений делаем summary
+const SUMMARY_PROMPT = `Ты — эксперт по сжатию диалогов. Твоя задача — создать краткое, но информативное резюме разговора.
+
+ПРАВИЛА:
+1. Сохрани ВСЕ важные факты, предпочтения и детали, которые пользователь сообщил
+2. Сохрани контекст и настроение разговора
+3. Используй структурированный формат
+4. Не теряй критическую информацию для продолжения диалога
+5. Резюме должно быть на русском языке
+
+Ответ верни в формате:
+### Резюме диалога
+**Пользователь сообщил:**
+- [ключевые факты и предпочтения]
+
+**Обсуждалось:**
+- [основные темы разговора]
+
+**Важный контекст:**
+- [что нужно помнить для продолжения]`;
+
+// Статистика сжатия (in-memory для демо)
+let compressionStats = {
+    totalCompressions: 0,
+    totalTokensSaved: 0,
+    lastCompressionTime: null
+};
+
 // Дефолтное системное сообщение для агента (используется если клиент не прислал своё)
 const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом. 
 Ты помогаешь гостям подобрать идеальный кальян на основе их предпочтений.
@@ -77,6 +106,90 @@ const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональны
 
 // Функция задержки
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ===== Функция оценки токенов (приблизительная) =====
+function estimateTokens(text) {
+    if (!text) return 0;
+    // Приблизительная оценка: ~4 символа = 1 токен для русского текста
+    // Для английского ~4 символа = 1 токен
+    return Math.ceil(text.length / 3.5);
+}
+
+// ===== Функция создания summary истории =====
+async function createHistorySummary(history, provider = 'openai', model = null) {
+    if (history.length === 0) return null;
+    
+    // Формируем текст истории для сжатия
+    const historyText = history.map((msg, i) => {
+        const role = msg.role === 'user' ? 'Пользователь' : 'Ассистент';
+        return `${role}: ${msg.content}`;
+    }).join('\n\n');
+    
+    const messages = [
+        { role: 'system', content: SUMMARY_PROMPT },
+        { role: 'user', content: `Создай резюме следующего диалога:\n\n${historyText}` }
+    ];
+    
+    try {
+        let response;
+        
+        if (provider === 'openai' && OPENAI_API_KEY) {
+            response = await callOpenAI(messages, 0.3);
+        } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+            const summaryModel = model || 'openai/gpt-4o-mini'; // Используем быструю модель для summary
+            response = await callOpenRouter(messages, summaryModel, 0.3);
+        } else {
+            console.warn('[Summary] Нет доступного API для создания summary');
+            return null;
+        }
+        
+        if (!response.ok) {
+            console.error('[Summary] Ошибка API при создании summary');
+            return null;
+        }
+        
+        const data = await response.json();
+        const summary = data.choices?.[0]?.message?.content;
+        
+        if (summary) {
+            const originalTokens = estimateTokens(historyText);
+            const summaryTokens = estimateTokens(summary);
+            const tokensSaved = originalTokens - summaryTokens;
+            
+            compressionStats.totalCompressions++;
+            compressionStats.totalTokensSaved += Math.max(0, tokensSaved);
+            compressionStats.lastCompressionTime = new Date().toISOString();
+            
+            console.log('\n' + '🗜️'.repeat(20));
+            console.log(`[${new Date().toISOString()}] ИСТОРИЯ СЖАТА`);
+            console.log('🗜️'.repeat(20));
+            console.log(`Оригинальных сообщений: ${history.length}`);
+            console.log(`Оригинальный размер: ~${originalTokens} токенов`);
+            console.log(`Размер summary: ~${summaryTokens} токенов`);
+            console.log(`Сэкономлено: ~${tokensSaved} токенов (${((tokensSaved/originalTokens)*100).toFixed(1)}%)`);
+            console.log('🗜️'.repeat(20) + '\n');
+            
+            return {
+                summary,
+                originalCount: history.length,
+                originalTokens,
+                summaryTokens,
+                tokensSaved,
+                compressionRatio: ((tokensSaved/originalTokens)*100).toFixed(1)
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('[Summary] Ошибка при создании summary:', error);
+        return null;
+    }
+}
+
+// ===== Функция проверки необходимости сжатия =====
+function shouldCompress(history, threshold = COMPRESSION_THRESHOLD) {
+    return history.length >= threshold;
+}
 
 // Функция запроса к OpenAI с retry
 async function callOpenAI(messages, temperature = 0.7, retryCount = 0) {
@@ -284,7 +397,8 @@ app.post('/api/chat', async (req, res) => {
         try {
             parsedReply = JSON.parse(rawReply);
         } catch (e) {
-            console.error('Ошибка парсинга JSON ответа:', e);
+            // Это нормально - модель может вернуть обычный текст вместо JSON
+            console.log('[Info] Модель вернула текст вместо JSON, используем как есть');
             parsedReply = { message: message, answer: rawReply };
         }
 
@@ -475,8 +589,8 @@ app.post('/api/chat/openrouter', async (req, res) => {
                 }
             }
         } catch (e) {
-            console.error('Ошибка парсинга JSON ответа:', e);
-            // Если не удалось распарсить, возвращаем как есть
+            // Это нормально - модель может вернуть обычный текст вместо JSON
+            console.log('[Info] Модель вернула текст вместо JSON, используем как есть');
             parsedReply = { message: message, answer: rawReply };
         }
 
@@ -540,6 +654,52 @@ app.get('/api/openrouter/models', (req, res) => {
     res.json({
         models: OPENROUTER_MODELS,
         hasApiKey: !!OPENROUTER_API_KEY
+    });
+});
+
+// ===== API для сжатия истории =====
+app.post('/api/compress-history', async (req, res) => {
+    try {
+        const { history, provider = 'openai', model } = req.body;
+        
+        if (!history || !Array.isArray(history) || history.length === 0) {
+            return res.status(400).json({ error: 'История пуста или не передана' });
+        }
+        
+        console.log('\n' + '📦'.repeat(20));
+        console.log(`[${new Date().toISOString()}] ЗАПРОС НА СЖАТИЕ ИСТОРИИ`);
+        console.log('📦'.repeat(20));
+        console.log(`Сообщений в истории: ${history.length}`);
+        console.log(`Провайдер: ${provider}`);
+        console.log('📦'.repeat(20) + '\n');
+        
+        const result = await createHistorySummary(history, provider, model);
+        
+        if (result) {
+            res.json({
+                success: true,
+                ...result
+            });
+        } else {
+            res.status(500).json({ 
+                error: 'Не удалось создать summary',
+                success: false 
+            });
+        }
+    } catch (error) {
+        console.error('[Compress] Error:', error);
+        res.status(500).json({ 
+            error: 'Ошибка при сжатии истории',
+            success: false 
+        });
+    }
+});
+
+// ===== API для получения статистики сжатия =====
+app.get('/api/compression-stats', (req, res) => {
+    res.json({
+        ...compressionStats,
+        threshold: COMPRESSION_THRESHOLD
     });
 });
 

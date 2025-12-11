@@ -182,6 +182,74 @@
                         </div>
                     </div>
                     
+                    <!-- History Compression Control -->
+                    <div class="compression-control">
+                        <div class="compression-header">
+                            <label>🗜️ Сжатие истории диалога</label>
+                            <div class="compression-toggle-wrapper">
+                                <input type="checkbox" id="compression-enabled" class="compression-toggle" />
+                                <label for="compression-enabled" class="toggle-label">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="compression-settings" id="compression-settings">
+                            <div class="compression-threshold-row">
+                                <label for="compression-threshold">Сжимать каждые:</label>
+                                <input 
+                                    type="number" 
+                                    id="compression-threshold" 
+                                    min="4" 
+                                    max="30" 
+                                    step="1" 
+                                    value="10"
+                                    class="threshold-input"
+                                />
+                                <span class="threshold-unit">сообщений</span>
+                            </div>
+                            
+                            <div class="compression-info">
+                                <span class="compression-info-icon">💡</span>
+                                <span class="compression-info-text">
+                                    При достижении порога, старые сообщения будут заменены кратким резюме. 
+                                    Это экономит токены и сохраняет контекст диалога.
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Compression Stats -->
+                        <div class="compression-stats" id="compression-stats">
+                            <div class="stats-header">📈 Статистика сжатия</div>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <span class="stat-value" id="stat-messages">0</span>
+                                    <span class="stat-label">всего сообщений</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-value" id="stat-original-tokens">0</span>
+                                    <span class="stat-label">было бы без сжатия</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-value" id="stat-current-tokens">0</span>
+                                    <span class="stat-label">отправляется в API</span>
+                                </div>
+                                <div class="stat-item highlight">
+                                    <span class="stat-value" id="stat-saved-tokens">0</span>
+                                    <span class="stat-label">сэкономлено</span>
+                                </div>
+                            </div>
+                            <div class="compression-history" id="compression-history" hidden>
+                                <div class="history-label">История сжатий:</div>
+                                <div class="history-items" id="compression-history-items"></div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="manual-compress-btn" class="manual-compress-btn">
+                            🗜️ Сжать историю сейчас
+                        </button>
+                    </div>
+                    
                     <label for="system-prompt-textarea">Задайте поведение агента:</label>
                     <textarea 
                         id="system-prompt-textarea" 
