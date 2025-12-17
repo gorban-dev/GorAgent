@@ -1243,6 +1243,147 @@ body {
     color: #CE93D8;
 }
 
+/* ===== MCP Tools Section ===== */
+.mcp-tools-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    margin-bottom: 8px;
+}
+
+.mcp-tools-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mcp-tools-header label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mcp-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(156, 163, 175, 0.15);
+    border-radius: var(--border-radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.mcp-status-badge.connected {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.mcp-status-badge.disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--error);
+}
+
+.mcp-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.mcp-status-badge.connected .mcp-status-dot {
+    background: var(--success);
+}
+
+.mcp-status-badge.disconnected .mcp-status-dot {
+    background: var(--error);
+}
+
+.mcp-tools-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mcp-tools-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+}
+
+.mcp-info-icon {
+    font-size: 1.5rem;
+    opacity: 0.7;
+}
+
+.mcp-info-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mcp-server-url {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.mcp-tools-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.mcp-tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mcp-tool-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+}
+
+.mcp-tool-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.mcp-tool-description {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.mcp-tool-params {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.mcp-tool-param {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+}
+
 /* ===== Current Prompt Info Update ===== */
 .current-prompt-info {
     display: flex;

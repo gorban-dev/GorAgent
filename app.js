@@ -178,7 +178,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Загрузить пользовательские пресеты
     loadCustomPresets();
-    
+
+    // Загрузить MCP инструменты
+    loadMCPTools();
+
     // Инициализировать обработчики переключения API
     initApiProviderHandlers();
     
@@ -492,6 +495,70 @@ function createCustomPreset(name, prompt) {
     console.log('%c💾 Новый пресет сохранён:', 'color: #10b981', name);
 }
 
+// ===== MCP Tools =====
+
+// Загрузка и отображение MCP инструментов
+async function loadMCPTools() {
+    try {
+        const response = await fetch('/api/mcp/tools');
+        const data = await response.json();
+
+        updateMCPStatus(data);
+        renderMCPTools(data.tools);
+    } catch (error) {
+        console.error('[MCP] Ошибка загрузки инструментов:', error);
+        updateMCPStatus({ enabled: false, tools: [], error: 'Не удалось загрузить инструменты' });
+    }
+}
+
+// Обновление статуса MCP
+function updateMCPStatus(data) {
+    const statusBadge = document.getElementById('mcp-status-badge');
+    const statusDot = statusBadge.querySelector('.mcp-status-dot');
+    const statusText = statusBadge.querySelector('.mcp-status-text');
+    const toolsCount = document.getElementById('mcp-tools-count');
+
+    if (data.error || !data.enabled) {
+        statusBadge.className = 'mcp-status-badge disconnected';
+        statusText.textContent = 'Отключен';
+        toolsCount.textContent = '0';
+    } else {
+        statusBadge.className = 'mcp-status-badge connected';
+        statusText.textContent = 'Подключен';
+        toolsCount.textContent = data.tools.length || 0;
+    }
+}
+
+// Отрисовка списка MCP инструментов
+function renderMCPTools(tools) {
+    const toolsList = document.getElementById('mcp-tools-list');
+
+    if (!tools || tools.length === 0) {
+        toolsList.innerHTML = '<div class="mcp-no-tools">Инструменты не найдены</div>';
+        return;
+    }
+
+    toolsList.innerHTML = tools.map(tool => {
+        const inputSchema = tool.inputSchema || {};
+        const properties = inputSchema.properties || {};
+        const required = inputSchema.required || [];
+
+        const paramsHtml = Object.keys(properties).map(key => {
+            const param = properties[key];
+            const isRequired = required.includes(key);
+            return `<div class="mcp-tool-param">${key}${isRequired ? ' *' : ''}: ${param.description || 'Нет описания'}</div>`;
+        }).join('');
+
+        return `
+            <div class="mcp-tool-item">
+                <div class="mcp-tool-name">🔧 ${tool.name}</div>
+                <div class="mcp-tool-description">${tool.description || 'Нет описания'}</div>
+                ${paramsHtml ? `<div class="mcp-tool-params">${paramsHtml}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
 // ===== Обработчики событий =====
 sendBtn.addEventListener('click', handleSend);
 
@@ -514,6 +581,9 @@ settingsBtn.addEventListener('click', () => {
     systemPromptTextarea.value = currentSystemPrompt;
     selectedPresetName = currentPresetName;
     document.body.style.overflow = 'hidden';
+
+    // Загрузить свежие MCP инструменты
+    loadMCPTools();
     
     // Установить текущее значение temperature
     const slider = document.getElementById('temperature-slider');

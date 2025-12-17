@@ -38,6 +38,10 @@ const OPENROUTER_MODELS = {
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 секунда
 
+// ===== Конфигурация MCP =====
+const MCP_SERVER_URL = 'http://localhost:8080';
+const MCP_ENABLED = true; // Включить/выключить MCP интеграцию
+
 // ===== Конфигурация сжатия истории =====
 const COMPRESSION_THRESHOLD = 10; // Каждые N сообщений делаем summary
 const SUMMARY_PROMPT = `Ты — эксперт по сжатию диалогов. Твоя задача — создать краткое, но информативное резюме разговора.
@@ -67,8 +71,82 @@ let compressionStats = {
     lastCompressionTime: null
 };
 
+// Кэш для инструментов MCP
+let mcpToolsCache = [];
+let mcpToolsCacheTime = 0;
+const MCP_TOOLS_CACHE_TTL = 300000; // 5 минут
+
+// Функция для получения актуального system prompt с инструментами
+async function getSystemPromptWithTools(basePrompt) {
+    if (!MCP_ENABLED) {
+        return basePrompt;
+    }
+
+    // Проверяем кэш инструментов
+    const now = Date.now();
+    if (now - mcpToolsCacheTime > MCP_TOOLS_CACHE_TTL) {
+        mcpToolsCache = await getMCPTools();
+        mcpToolsCacheTime = now;
+    }
+
+    if (mcpToolsCache.length === 0) {
+        return basePrompt;
+    }
+
+    // Формируем описание инструментов для system prompt
+    const toolsDescription = mcpToolsCache.map(tool => {
+        const props = tool.inputSchema?.properties || {};
+        const required = tool.inputSchema?.required || [];
+        const params = Object.keys(props).map(key => {
+            const param = props[key];
+            const requiredMark = required.includes(key) ? ' (обязательный)' : ' (опциональный)';
+            return `  - ${key}: ${param.description}${requiredMark}`;
+        }).join('\n');
+
+        return `### ${tool.name}
+${tool.description}
+
+Параметры:
+${params}`;
+    }).join('\n\n');
+
+    // Добавляем инструкции по использованию инструментов
+    const toolsInstructions = `
+## Доступные инструменты
+
+У тебя есть доступ к следующим инструментам через MCP (Model Context Protocol):
+
+${toolsDescription}
+
+### Как использовать инструменты:
+
+1. **Анализируй запрос пользователя** - определи, нужен ли инструмент для ответа
+2. **Если инструмент нужен** - используй специальный формат вызова инструмента
+3. **Формат вызова инструмента:**
+   - Пиши ТОЛЬКО JSON объект в квадратных скобках: [{"tool_call": {"name": "tool_name", "arguments": {...}}}]
+   - tool_name - имя инструмента
+   - arguments - объект с параметрами инструмента
+4. **После получения результата** - используй его в своем ответе пользователю
+
+### Примеры использования инструментов:
+
+Если пользователь спрашивает погоду:
+[{"tool_call": {"name": "get_weather", "arguments": {"city": "Москва"}}}]
+
+Если пользователь просит найти информацию:
+[{"tool_call": {"name": "search_web", "arguments": {"query": "тема поиска"}}}]
+
+### Важно:
+- Вызывай инструменты ТОЛЬКО когда это действительно необходимо
+- Используй результаты инструментов в своем ответе
+- Продолжай диалог естественно после получения результатов инструментов
+`;
+
+    return basePrompt + '\n\n' + toolsInstructions;
+}
+
 // Дефолтное системное сообщение для агента (используется если клиент не прислал своё)
-const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом. 
+const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом.
 Ты помогаешь гостям подобрать идеальный кальян на основе их предпочтений.
 
 ВАЖНО: Ты должен вести диалог по следующему сценарию:
@@ -95,7 +173,7 @@ const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональны
 Пример формата микса:
 "🎯 Рецепт микса (чаша 25г):
 • Darkside Core Barvy Citrus — 40% (10г)
-• Tangiers Noir Cane Mint — 30% (7.5г)  
+• Tangiers Noir Cane Mint — 30% (7.5г)
 • Fumari White Gummi Bear — 30% (7.5г)"
 
 Отвечай на русском языке. Будь дружелюбным и профессиональным, используй эмодзи где уместно.
@@ -106,6 +184,159 @@ const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональны
 
 // Функция задержки
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ===== Функции для работы с MCP =====
+
+// Получение списка инструментов от MCP сервера
+async function getMCPTools() {
+    if (!MCP_ENABLED) return [];
+
+    try {
+        const response = await fetch(`${MCP_SERVER_URL}/tools`);
+        if (!response.ok) {
+            console.warn('[MCP] Не удалось получить список инструментов:', response.status);
+            return [];
+        }
+        const data = await response.json();
+        console.log('[MCP] Получены инструменты:', data);
+        return data;
+    } catch (error) {
+        console.warn('[MCP] Ошибка при получении инструментов:', error.message);
+        return [];
+    }
+}
+
+// Выполнение инструмента через MCP сервер
+async function executeMCPTool(toolName, arguments) {
+    if (!MCP_ENABLED) {
+        throw new Error('MCP интеграция отключена');
+    }
+
+    try {
+        const response = await fetch(`${MCP_SERVER_URL}/tools/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: toolName,
+                arguments: arguments
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Ошибка выполнения инструмента: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('[MCP] Результат выполнения инструмента:', toolName, result);
+        return result;
+    } catch (error) {
+        console.error('[MCP] Ошибка выполнения инструмента:', error);
+        throw error;
+    }
+}
+
+// Обработка tool calls в ответе модели
+async function processToolCalls(responseText, provider = 'openai', model = null, temperature = 0.7) {
+    try {
+        // Ищем tool calls в формате [{"tool_call": {"name": "...", "arguments": {...}}}]
+        const toolCallRegex = /\[\s*\{\s*"tool_call"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"arguments"\s*:\s*(\{[^}]*\})\s*\}\s*\}\s*\]/g;
+        const toolCalls = [];
+        let match;
+
+        while ((match = toolCallRegex.exec(responseText)) !== null) {
+            try {
+                const toolName = match[1];
+                const argumentsStr = match[2];
+                const arguments = JSON.parse(argumentsStr);
+
+                toolCalls.push({
+                    name: toolName,
+                    arguments: arguments
+                });
+            } catch (e) {
+                console.warn('[Tool Call] Ошибка парсинга tool call:', e.message);
+            }
+        }
+
+        if (toolCalls.length === 0) {
+            return null; // Нет tool calls
+        }
+
+        console.log('[Tool Call] Найдены tool calls:', toolCalls.length);
+
+        // Выполняем все tool calls
+        const toolResults = [];
+        for (const toolCall of toolCalls) {
+            try {
+                console.log(`[Tool Call] Выполняю инструмент: ${toolCall.name}`, toolCall.arguments);
+                const result = await executeMCPTool(toolCall.name, toolCall.arguments);
+                toolResults.push({
+                    tool_call: toolCall,
+                    result: result,
+                    success: true
+                });
+            } catch (error) {
+                console.error(`[Tool Call] Ошибка выполнения инструмента ${toolCall.name}:`, error.message);
+                toolResults.push({
+                    tool_call: toolCall,
+                    error: error.message,
+                    success: false
+                });
+            }
+        }
+
+        // Формируем сообщение с результатами для модели
+        const toolResultsMessage = toolResults.map((tr, i) => {
+            const toolCall = tr.tool_call;
+            if (tr.success) {
+                return `Инструмент ${i + 1} (${toolCall.name}): Выполнен успешно\nРезультат: ${JSON.stringify(tr.result)}`;
+            } else {
+                return `Инструмент ${i + 1} (${toolCall.name}): Ошибка выполнения\nОшибка: ${tr.error}`;
+            }
+        }).join('\n\n');
+
+        // Создаем новый запрос к модели с результатами инструментов
+        const followUpMessages = [
+            {
+                role: 'system',
+                content: await getSystemPromptWithTools('Ты получил результаты выполнения инструментов. Используй эту информацию в своем ответе пользователю. Ответь на русском языке в формате JSON.')
+            },
+            {
+                role: 'user',
+                content: `Результаты выполнения инструментов:\n\n${toolResultsMessage}\n\nТеперь дай окончательный ответ пользователю на основе этих результатов.`
+            }
+        ];
+
+        let followUpResponse;
+        if (provider === 'openai' && OPENAI_API_KEY) {
+            followUpResponse = await callOpenAI(followUpMessages, temperature);
+        } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+            followUpResponse = await callOpenRouter(followUpMessages, model || 'openai/gpt-4o-mini', temperature);
+        } else {
+            throw new Error('Нет доступного API провайдера для follow-up запроса');
+        }
+
+        if (!followUpResponse.ok) {
+            throw new Error('Ошибка при follow-up запросе к модели');
+        }
+
+        const followUpData = await followUpResponse.json();
+        const finalAnswer = followUpData.choices?.[0]?.message?.content || 'Не удалось получить ответ после выполнения инструментов.';
+
+        return {
+            originalResponse: responseText,
+            toolResults: toolResults,
+            finalAnswer: finalAnswer
+        };
+
+    } catch (error) {
+        console.error('[Tool Call] Ошибка обработки tool calls:', error);
+        return null;
+    }
+}
 
 // ===== Функция оценки токенов (приблизительная) =====
 function estimateTokens(text) {
@@ -303,12 +534,9 @@ app.post('/api/chat', async (req, res) => {
 
         // Используем переданный systemPrompt или дефолтный
         let activeSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
-        
-        // OpenAI требует упоминание "json" в сообщениях при использовании response_format: json_object
-        // Если в system prompt нет слова "json", добавляем инструкцию автоматически
-        if (!activeSystemPrompt.toLowerCase().includes('json')) {
-            //activeSystemPrompt += ;
-        }
+
+        // Добавляем инструменты MCP к system prompt
+        activeSystemPrompt = await getSystemPromptWithTools(activeSystemPrompt);
         
         // Логируем используемый System Prompt
         console.log('\n' + '~'.repeat(60));
@@ -379,7 +607,14 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const data = await response.json();
-        const rawReply = data.choices?.[0]?.message?.content || '{"message": "", "answer": "Не удалось получить ответ."}';
+        let rawReply = data.choices?.[0]?.message?.content || '{"message": "", "answer": "Не удалось получить ответ."}';
+
+        // Обрабатываем tool calls, если они есть
+        const toolCallResult = await processToolCalls(rawReply, 'openai', null, validTemperature);
+        if (toolCallResult) {
+            console.log('[Tool Call] Обнаружены tool calls, выполняем...');
+            rawReply = toolCallResult.finalAnswer;
+        }
 
         // Логируем сырой ответ от OpenAI
         console.log('\n' + '='.repeat(60));
@@ -484,11 +719,9 @@ app.post('/api/chat/openrouter', async (req, res) => {
 
         // Используем переданный systemPrompt или дефолтный
         let activeSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
-        
-        // Добавляем инструкцию по JSON формату если её нет
-        if (!activeSystemPrompt.toLowerCase().includes('json')) {
-           
-        }
+
+        // Добавляем инструменты MCP к system prompt
+        activeSystemPrompt = await getSystemPromptWithTools(activeSystemPrompt);
         
         // Логируем используемый System Prompt
         console.log('\n' + '~'.repeat(60));
@@ -558,7 +791,14 @@ app.post('/api/chat/openrouter', async (req, res) => {
         }
 
         const data = await response.json();
-        const rawReply = data.choices?.[0]?.message?.content || '{"message": "", "answer": "Не удалось получить ответ."}';
+        let rawReply = data.choices?.[0]?.message?.content || '{"message": "", "answer": "Не удалось получить ответ."}';
+
+        // Обрабатываем tool calls, если они есть
+        const toolCallResult = await processToolCalls(rawReply, 'openrouter', selectedModel, validTemperature);
+        if (toolCallResult) {
+            console.log('[Tool Call] Обнаружены tool calls, выполняем...');
+            rawReply = toolCallResult.finalAnswer;
+        }
 
         // Логируем сырой ответ от OpenRouter
         console.log('\n' + '='.repeat(60));
@@ -657,6 +897,25 @@ app.get('/api/openrouter/models', (req, res) => {
     });
 });
 
+// Получение списка MCP инструментов
+app.get('/api/mcp/tools', async (req, res) => {
+    try {
+        const tools = await getMCPTools();
+        res.json({
+            enabled: MCP_ENABLED,
+            tools: tools,
+            serverUrl: MCP_SERVER_URL
+        });
+    } catch (error) {
+        console.error('[API] Ошибка при получении MCP инструментов:', error);
+        res.status(500).json({
+            error: 'Не удалось получить список инструментов',
+            enabled: MCP_ENABLED,
+            tools: []
+        });
+    }
+});
+
 // ===== API для сжатия истории =====
 app.post('/api/compress-history', async (req, res) => {
     try {
@@ -704,16 +963,40 @@ app.get('/api/compression-stats', (req, res) => {
 });
 
 // Проверка статуса сервера
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        model: OPENAI_MODEL,
-        hasApiKey: !!OPENAI_API_KEY,
-        openrouter: {
-            hasApiKey: !!OPENROUTER_API_KEY,
-            modelsCount: Object.keys(OPENROUTER_MODELS).length
-        }
-    });
+app.get('/api/health', async (req, res) => {
+    try {
+        const mcpTools = await getMCPTools();
+        res.json({
+            status: 'ok',
+            model: OPENAI_MODEL,
+            hasApiKey: !!OPENAI_API_KEY,
+            openrouter: {
+                hasApiKey: !!OPENROUTER_API_KEY,
+                modelsCount: Object.keys(OPENROUTER_MODELS).length
+            },
+            mcp: {
+                enabled: MCP_ENABLED,
+                serverUrl: MCP_SERVER_URL,
+                toolsCount: mcpTools.length
+            }
+        });
+    } catch (error) {
+        res.json({
+            status: 'ok',
+            model: OPENAI_MODEL,
+            hasApiKey: !!OPENAI_API_KEY,
+            openrouter: {
+                hasApiKey: !!OPENROUTER_API_KEY,
+                modelsCount: Object.keys(OPENROUTER_MODELS).length
+            },
+            mcp: {
+                enabled: MCP_ENABLED,
+                serverUrl: MCP_SERVER_URL,
+                toolsCount: 0,
+                error: 'Не удалось проверить MCP сервер'
+            }
+        });
+    }
 });
 
 // ===== Запуск сервера =====
