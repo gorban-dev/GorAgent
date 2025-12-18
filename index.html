@@ -272,7 +272,84 @@
                             🗜️ Сжать историю сейчас
                         </button>
                     </div>
-                    
+
+                    <!-- Reminders Section -->
+                    <div class="reminders-section">
+                        <div class="reminders-header">
+                            <label>🔔 Напоминания</label>
+                            <span class="reminders-status-badge" id="reminders-status-badge">
+                                <span class="reminders-status-dot"></span>
+                                <span class="reminders-status-text">Активно</span>
+                            </span>
+                        </div>
+
+                        <!-- Quick Help -->
+                        <div class="reminders-help">
+                            <div class="help-text">
+                                💡 <strong>Создание через чат:</strong> Просто напишите "Напоминай мне о погоде в Шерегеше каждое утро"
+                            </div>
+                            <div class="help-examples">
+                                <div class="example">• "напоминай о погоде в Москве каждую минуту"</div>
+                                <div class="example">• "напомни о встрече каждый час"</div>
+                                <div class="example">• "создай напоминание о новостях каждые 30 минут"</div>
+                            </div>
+                        </div>
+
+                        <!-- Create New Reminder -->
+                        <div class="create-reminder-section">
+                            <div class="reminder-input-group">
+                                <input
+                                    type="text"
+                                    id="reminder-title"
+                                    placeholder="Название напоминания..."
+                                    maxlength="50"
+                                />
+                                <input
+                                    type="text"
+                                    id="reminder-description"
+                                    placeholder="Описание (например: погода в Шерегеше)"
+                                    maxlength="100"
+                                />
+                                <select id="reminder-interval" class="reminder-interval-select">
+                                    <option value="every-minute">Каждую минуту</option>
+                                    <option value="every-15-min">Каждые 15 минут</option>
+                                    <option value="every-30-min">Каждые 30 минут</option>
+                                    <option value="hourly">Каждый час</option>
+                                    <option value="daily">Ежедневно (9:00)</option>
+                                </select>
+                        <button type="button" id="create-reminder-btn" class="create-reminder-btn">
+                            ➕ Создать
+                        </button>
+                        <button type="button" id="test-reminders-btn" class="create-reminder-btn" style="background: #17a2b8; margin-left: 10px;">
+                            🧪 Проверить сейчас
+                        </button>
+                            </div>
+                        </div>
+
+                        <!-- Active Reminders List -->
+                        <div class="active-reminders" id="active-reminders">
+                            <div class="reminders-list-header">
+                                <span>Активные напоминания:</span>
+                                <span class="reminders-count" id="reminders-count">0</span>
+                                <button type="button" id="clear-all-reminders-btn" class="clear-all-btn" style="display: none;">
+                                    🗑️ Удалить все
+                                </button>
+                            </div>
+                            <div class="reminders-list" id="reminders-list">
+                                <!-- Напоминания будут добавлены динамически -->
+                                <div class="no-reminders">У вас пока нет активных напоминаний</div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Notifications -->
+                        <div class="recent-notifications" id="recent-notifications" hidden>
+                            <div class="notifications-header">📅 Последние уведомления:</div>
+                            <div class="notifications-list" id="notifications-list">
+                                <!-- Уведомления будут добавлены динамически -->
+                            </div>
+                        </div>
+                    </div>
+
                     <label for="system-prompt-textarea">Задайте поведение агента:</label>
                     <textarea 
                         id="system-prompt-textarea" 
@@ -302,6 +379,7 @@
                             <button type="button" class="preset-btn" data-preset="pirate">🏴‍☠️ Пират</button>
                             <button type="button" class="preset-btn" data-preset="poet">📜 Поэт</button>
                             <button type="button" class="preset-btn" data-preset="tech">💻 Программист</button>
+                            <button type="button" class="preset-btn" data-preset="reminders">🔔 Напоминания</button>
                         </div>
                     </div>
                     

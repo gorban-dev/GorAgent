@@ -916,6 +916,27 @@ app.get('/api/mcp/tools', async (req, res) => {
     }
 });
 
+// Выполнение MCP инструмента
+app.post('/api/mcp/execute', async (req, res) => {
+    try {
+        const { toolName, arguments: toolArgs } = req.body;
+
+        if (!toolName) {
+            return res.status(400).json({ error: 'Не указан toolName' });
+        }
+
+        console.log('[API] Выполнение MCP инструмента:', toolName, toolArgs);
+
+        const result = await executeMCPTool(toolName, toolArgs || {});
+        res.json({ result });
+    } catch (error) {
+        console.error('[API] Ошибка выполнения MCP инструмента:', error);
+        res.status(500).json({
+            error: error.message || 'Ошибка выполнения инструмента'
+        });
+    }
+});
+
 // ===== API для сжатия истории =====
 app.post('/api/compress-history', async (req, res) => {
     try {
