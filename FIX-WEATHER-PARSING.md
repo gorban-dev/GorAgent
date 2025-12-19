@@ -267,3 +267,4 @@ Weather MCP (строка) → Parser (объект) → Formatter MCP → FileS
 
 **Сервер перезапущен и готов к работе:** http://localhost:3000/mcp-multi-demo
 
+

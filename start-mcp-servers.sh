@@ -76,3 +76,4 @@ echo "Логи серверов:"
 echo "   tail -f logs/formatter.log"
 echo "   tail -f logs/filesaver.log"
 
+

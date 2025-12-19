@@ -318,3 +318,4 @@ Weather → Formatter → FileSaver → CloudStorage
 
 **Веб-интерфейс:** http://localhost:3000/mcp-multi-demo
 
+
