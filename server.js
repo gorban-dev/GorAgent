@@ -76,6 +76,18 @@ let mcpToolsCache = [];
 let mcpToolsCacheTime = 0;
 const MCP_TOOLS_CACHE_TTL = 300000; // 5 минут
 
+// ===== Инициализация MCP Agent =====
+const MCPAgent = require('./mcp-agent');
+const mcpAgent = new MCPAgent();
+
+// ===== Инициализация MCP Multi-Agent =====
+const MCPMultiAgent = require('./mcp-multi-agent');
+const mcpMultiAgent = new MCPMultiAgent({
+    weatherUrl: MCP_SERVER_URL, // Используем существующий Weather MCP
+    formatterUrl: 'http://localhost:8082',
+    fileSaverUrl: 'http://localhost:8081'
+});
+
 // Функция для получения актуального system prompt с инструментами
 async function getSystemPromptWithTools(basePrompt) {
     if (!MCP_ENABLED) {
@@ -501,6 +513,16 @@ app.use(express.static(path.join(__dirname)));
 // Главная страница
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Страница демо MCP цепочки
+app.get('/mcp-demo', (req, res) => {
+    res.sendFile(path.join(__dirname, 'mcp-chain-demo.html'));
+});
+
+// Страница демо MCP Multi-Agent
+app.get('/mcp-multi-demo', (req, res) => {
+    res.sendFile(path.join(__dirname, 'mcp-multi-demo.html'));
 });
 
 // API для чата
@@ -983,10 +1005,212 @@ app.get('/api/compression-stats', (req, res) => {
     });
 });
 
+// ===== API для MCP Agent (цепочки инструментов) =====
+
+// Выполнение полной цепочки: поиск → суммаризация → сохранение
+app.post('/api/mcp/chain', async (req, res) => {
+    try {
+        const { query, options = {} } = req.body;
+
+        if (!query || typeof query !== 'string') {
+            return res.status(400).json({ error: 'Не указан query для поиска' });
+        }
+
+        console.log('[API] Запуск MCP цепочки:', query);
+
+        const result = await mcpAgent.executeChain(query, options);
+
+        res.json(result);
+    } catch (error) {
+        console.error('[API] Ошибка выполнения MCP цепочки:', error);
+        res.status(500).json({
+            error: error.message || 'Ошибка выполнения цепочки'
+        });
+    }
+});
+
+// Получение списка доступных MCP инструментов (из локального агента)
+app.get('/api/mcp/agent-tools', (req, res) => {
+    try {
+        const tools = mcpAgent.getTools();
+        res.json({
+            tools,
+            count: tools.length
+        });
+    } catch (error) {
+        console.error('[API] Ошибка получения инструментов:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Получение истории выполнения цепочек
+app.get('/api/mcp/history', (req, res) => {
+    try {
+        const history = mcpAgent.getExecutionHistory();
+        res.json({
+            history,
+            count: history.length
+        });
+    } catch (error) {
+        console.error('[API] Ошибка получения истории:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Получение статистики выполнения
+app.get('/api/mcp/stats', (req, res) => {
+    try {
+        const stats = mcpAgent.getStats();
+        res.json(stats);
+    } catch (error) {
+        console.error('[API] Ошибка получения статистики:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Получение списка сохраненных файлов
+app.get('/api/mcp/files', async (req, res) => {
+    try {
+        const files = await mcpAgent.getSavedFiles();
+        res.json({
+            files,
+            count: files.length
+        });
+    } catch (error) {
+        console.error('[API] Ошибка получения файлов:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Чтение конкретного сохраненного файла
+app.get('/api/mcp/files/:filename', async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const file = await mcpAgent.readFile(filename);
+        res.json(file);
+    } catch (error) {
+        console.error('[API] Ошибка чтения файла:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Выполнение отдельного MCP инструмента через агента
+app.post('/api/mcp/tool', async (req, res) => {
+    try {
+        const { toolName, args = {} } = req.body;
+
+        if (!toolName) {
+            return res.status(400).json({ error: 'Не указан toolName' });
+        }
+
+        console.log('[API] Выполнение MCP инструмента через агента:', toolName, args);
+
+        const result = await mcpAgent.executeTool(toolName, args);
+        res.json({ result });
+    } catch (error) {
+        console.error('[API] Ошибка выполнения инструмента:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// ===== API для MCP Multi-Agent (работа с несколькими MCP серверами) =====
+
+// Запуск цепочки погоды: Weather MCP → Formatter MCP → FileSaver MCP
+app.post('/api/mcp-multi/weather-chain', async (req, res) => {
+    try {
+        const { city, options = {} } = req.body;
+
+        if (!city) {
+            return res.status(400).json({ error: 'Не указан город (city)' });
+        }
+
+        console.log('[API Multi] Запуск цепочки погоды для города:', city);
+
+        const result = await mcpMultiAgent.executeWeatherChain(city, options);
+
+        res.json(result);
+    } catch (error) {
+        console.error('[API Multi] Ошибка выполнения цепочки:', error);
+        res.status(500).json({
+            error: error.message || 'Ошибка выполнения цепочки'
+        });
+    }
+});
+
+// Проверка доступности всех MCP серверов
+app.get('/api/mcp-multi/check-servers', async (req, res) => {
+    try {
+        const status = await mcpMultiAgent.checkAllServers();
+        res.json(status);
+    } catch (error) {
+        console.error('[API Multi] Ошибка проверки серверов:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Получение всех tools от всех MCP серверов
+app.get('/api/mcp-multi/all-tools', async (req, res) => {
+    try {
+        const tools = await mcpMultiAgent.getAllTools();
+        res.json(tools);
+    } catch (error) {
+        console.error('[API Multi] Ошибка получения tools:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Статистика multi-agent
+app.get('/api/mcp-multi/stats', (req, res) => {
+    try {
+        const stats = mcpMultiAgent.getStats();
+        res.json(stats);
+    } catch (error) {
+        console.error('[API Multi] Ошибка получения статистики:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// История выполнения multi-agent
+app.get('/api/mcp-multi/history', (req, res) => {
+    try {
+        const history = mcpMultiAgent.getExecutionHistory();
+        res.json({
+            history,
+            count: history.length
+        });
+    } catch (error) {
+        console.error('[API Multi] Ошибка получения истории:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
 // Проверка статуса сервера
 app.get('/api/health', async (req, res) => {
     try {
         const mcpTools = await getMCPTools();
+        const mcpAgentStats = mcpAgent.getStats();
+        const mcpAgentTools = mcpAgent.getTools();
+        
         res.json({
             status: 'ok',
             model: OPENAI_MODEL,
@@ -999,6 +1223,11 @@ app.get('/api/health', async (req, res) => {
                 enabled: MCP_ENABLED,
                 serverUrl: MCP_SERVER_URL,
                 toolsCount: mcpTools.length
+            },
+            mcpAgent: {
+                enabled: true,
+                toolsCount: mcpAgentTools.length,
+                stats: mcpAgentStats
             }
         });
     } catch (error) {
@@ -1015,6 +1244,11 @@ app.get('/api/health', async (req, res) => {
                 serverUrl: MCP_SERVER_URL,
                 toolsCount: 0,
                 error: 'Не удалось проверить MCP сервер'
+            },
+            mcpAgent: {
+                enabled: true,
+                toolsCount: 3,
+                stats: mcpAgent.getStats()
             }
         });
     }

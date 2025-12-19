@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Multi-Server Demo - GorAgent</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #13131a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #e4e4e7;
+            --text-secondary: #a1a1aa;
+            --accent-1: #7c3aed;
+            --accent-2: #ec4899;
+            --accent-3: #10b981;
+            --accent-error: #ef4444;
+            --border: #27272a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .servers-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .server-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .server-card.available {
+            border-color: var(--accent-3);
+        }
+
+        .server-card.unavailable {
+            border-color: var(--accent-error);
+            opacity: 0.6;
+        }
+
+        .server-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .server-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .server-url {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .server-status {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .server-status.available {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-3);
+        }
+
+        .server-status.unavailable {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-error);
+        }
+
+        .demo-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .demo-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-1);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .chain-visualization {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+        }
+
+        .chain-step {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .chain-step.active {
+            border-color: var(--accent-1);
+            box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+        }
+
+        .chain-step.completed {
+            border-color: var(--accent-3);
+        }
+
+        .chain-arrow {
+            flex: 0 0 50px;
+            text-align: center;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+        }
+
+        .log-container {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-container pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-1);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(124, 58, 237, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-1);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-warning {
+            background: rgba(234, 179, 8, 0.1);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            color: #eab308;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .chain-visualization {
+                flex-direction: column;
+            }
+
+            .chain-arrow {
+                transform: rotate(90deg);
+                margin: 0.5rem 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔗 MCP Multi-Server Chain</h1>
+            <p class="subtitle">Демонстрация работы с несколькими независимыми MCP серверами</p>
+        </header>
+
+        <!-- Статус MCP серверов -->
+        <div id="serversStatus" class="servers-status">
+            <div class="server-card" id="weather-server">
+                <div class="server-status unavailable">Проверка...</div>
+                <div class="server-icon">🌤️</div>
+                <div class="server-name">Weather MCP</div>
+                <div class="server-url">localhost:8080</div>
+            </div>
+            <div class="server-card" id="formatter-server">
+                <div class="server-status unavailable">Проверка...</div>
+                <div class="server-icon">✨</div>
+                <div class="server-name">Formatter MCP</div>
+                <div class="server-url">localhost:8082</div>
+            </div>
+            <div class="server-card" id="filesaver-server">
+                <div class="server-status unavailable">Проверка...</div>
+                <div class="server-icon">💾</div>
+                <div class="server-name">FileSaver MCP</div>
+                <div class="server-url">localhost:8081</div>
+            </div>
+        </div>
+
+        <!-- Визуализация цепочки -->
+        <div class="demo-section">
+            <h2>🔗 Цепочка выполнения</h2>
+            <div class="chain-visualization">
+                <div class="chain-step" id="chain-step-1">
+                    <div style="font-size: 2rem;">🌤️</div>
+                    <div style="font-weight: 600; margin-top: 0.5rem;">Weather MCP</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Получение погоды</div>
+                </div>
+                <div class="chain-arrow">→</div>
+                <div class="chain-step" id="chain-step-2">
+                    <div style="font-size: 2rem;">✨</div>
+                    <div style="font-weight: 600; margin-top: 0.5rem;">Formatter MCP</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Форматирование</div>
+                </div>
+                <div class="chain-arrow">→</div>
+                <div class="chain-step" id="chain-step-3">
+                    <div style="font-size: 2rem;">💾</div>
+                    <div style="font-weight: 600; margin-top: 0.5rem;">FileSaver MCP</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Сохранение в файл</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Форма запуска -->
+        <div class="demo-section">
+            <h2>🚀 Запуск цепочки</h2>
+            
+            <div id="serversWarning" class="alert alert-warning hidden">
+                ⚠️ Не все MCP серверы доступны. Запустите их перед использованием:
+                <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                    <li>Weather MCP - ваш существующий сервер (порт 8080)</li>
+                    <li><code>node mcp-server-formatter.js</code> (порт 8082)</li>
+                    <li><code>node mcp-server-filesaver.js</code> (порт 8081)</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label for="cityInput">Город</label>
+                <input type="text" id="cityInput" placeholder="Например: Москва, Шерегеш, Братск" value="Москва">
+            </div>
+
+            <div class="form-group">
+                <label for="formatSelect">Формат отчёта</label>
+                <select id="formatSelect">
+                    <option value="markdown">Markdown</option>
+                    <option value="html">HTML</option>
+                    <option value="text">Обычный текст</option>
+                    <option value="json">JSON</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="languageSelect">Язык</label>
+                <select id="languageSelect">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button id="runChainBtn" onclick="runWeatherChain()">
+                    <span id="runBtnText">▶️ Запустить цепочку</span>
+                    <span id="runBtnSpinner" class="spinner hidden"></span>
+                </button>
+                <button class="secondary" onclick="checkServers()">🔄 Проверить серверы</button>
+                <button class="secondary" onclick="clearLog()">🗑️ Очистить лог</button>
+            </div>
+
+            <!-- Лог выполнения -->
+            <div class="log-container">
+                <pre id="logContent">Ожидание запуска...</pre>
+            </div>
+        </div>
+
+        <!-- Статистика -->
+        <div class="demo-section">
+            <h2>📊 Статистика</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalExecutions">0</div>
+                    <div class="stat-label">Всего выполнений</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successRate">0%</div>
+                    <div class="stat-label">Успешных</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgDuration">0ms</div>
+                    <div class="stat-label">Среднее время</div>
+                </div>
+            </div>
+            <div class="button-group" style="margin-top: 1rem;">
+                <button class="secondary" onclick="loadStats()">🔄 Обновить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let serversAvailable = false;
+
+        // Проверка серверов
+        async function checkServers() {
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp-multi/check-servers`);
+                const servers = await response.json();
+
+                serversAvailable = true;
+
+                for (const [name, status] of Object.entries(servers)) {
+                    const serverCard = document.getElementById(`${name}-server`);
+                    const statusBadge = serverCard.querySelector('.server-status');
+
+                    if (status.available) {
+                        serverCard.classList.remove('unavailable');
+                        serverCard.classList.add('available');
+                        statusBadge.classList.remove('unavailable');
+                        statusBadge.classList.add('available');
+                        statusBadge.textContent = 'Доступен';
+                    } else {
+                        serverCard.classList.remove('available');
+                        serverCard.classList.add('unavailable');
+                        statusBadge.classList.remove('available');
+                        statusBadge.classList.add('unavailable');
+                        statusBadge.textContent = 'Недоступен';
+                        serversAvailable = false;
+                    }
+                }
+
+                const warning = document.getElementById('serversWarning');
+                if (serversAvailable) {
+                    warning.classList.add('hidden');
+                    addToLog('✅ Все MCP серверы доступны!', 'success');
+                } else {
+                    warning.classList.remove('hidden');
+                    addToLog('⚠️ Не все серверы доступны', 'warning');
+                }
+            } catch (error) {
+                addToLog('❌ Ошибка проверки серверов: ' + error.message, 'error');
+            }
+        }
+
+        // Запуск цепочки
+        async function runWeatherChain() {
+            if (!serversAvailable) {
+                alert('Сначала запустите все MCP серверы!');
+                return;
+            }
+
+            const city = document.getElementById('cityInput').value.trim();
+            if (!city) {
+                alert('Введите название города');
+                return;
+            }
+
+            const format = document.getElementById('formatSelect').value;
+            const language = document.getElementById('languageSelect').value;
+
+            // UI
+            const runBtn = document.getElementById('runChainBtn');
+            runBtn.disabled = true;
+            document.getElementById('runBtnText').classList.add('hidden');
+            document.getElementById('runBtnSpinner').classList.remove('hidden');
+
+            resetChainSteps();
+            addToLog(`🚀 Запуск цепочки для города: ${city}`, 'running');
+            addToLog(`⚙️ Формат: ${format}, Язык: ${language}`);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp-multi/weather-chain`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        city: city,
+                        options: {
+                            format: format,
+                            language: language,
+                            includeEmoji: true,
+                            saveFormat: format === 'html' ? 'html' : format === 'json' ? 'json' : format === 'text' ? 'txt' : 'md'
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Анимация шагов
+                    for (const step of result.execution.steps) {
+                        updateChainStep(step.step, 'active');
+                        await new Promise(r => setTimeout(r, 300));
+                        updateChainStep(step.step, 'completed');
+                        addToLog(`✅ Шаг ${step.step}: ${step.tool} выполнен за ${step.duration}ms`);
+                    }
+
+                    addToLog('\n✨ Цепочка успешно выполнена!', 'success');
+                    addToLog(`⏱️ Общее время: ${result.execution.totalDuration}ms`);
+                    addToLog(`💾 Файл сохранён: ${result.savedFile}`);
+
+                    await loadStats();
+                } else {
+                    addToLog(`\n❌ Ошибка: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                addToLog(`\n❌ Ошибка: ${error.message}`, 'error');
+            } finally {
+                runBtn.disabled = false;
+                document.getElementById('runBtnText').classList.remove('hidden');
+                document.getElementById('runBtnSpinner').classList.add('hidden');
+            }
+        }
+
+        // Загрузка статистики
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp-multi/stats`);
+                const stats = await response.json();
+
+                document.getElementById('totalExecutions').textContent = stats.totalExecutions || 0;
+                document.getElementById('successRate').textContent = stats.successRate || '0%';
+                document.getElementById('avgDuration').textContent = `${stats.avgDuration || 0}ms`;
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+            }
+        }
+
+        // Вспомогательные функции
+        function addToLog(message, type = 'info') {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString('ru-RU');
+            
+            let prefix = '';
+            if (type === 'success') prefix = '✅ ';
+            if (type === 'error') prefix = '❌ ';
+            if (type === 'running') prefix = '🔄 ';
+            if (type === 'warning') prefix = '⚠️ ';
+            
+            logContent.textContent += `\n[${timestamp}] ${prefix}${message}`;
+            
+            const logContainer = document.querySelector('.log-container');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logContent').textContent = 'Лог очищен. Ожидание запуска...';
+            resetChainSteps();
+        }
+
+        function resetChainSteps() {
+            for (let i = 1; i <= 3; i++) {
+                const step = document.getElementById(`chain-step-${i}`);
+                step.classList.remove('active', 'completed');
+            }
+        }
+
+        function updateChainStep(stepNumber, status) {
+            const step = document.getElementById(`chain-step-${stepNumber}`);
+            step.classList.remove('active', 'completed');
+            step.classList.add(status);
+        }
+
+        // Инициализация
+        window.addEventListener('DOMContentLoaded', () => {
+            checkServers();
+            loadStats();
+        });
+    </script>
+</body>
+</html>
+

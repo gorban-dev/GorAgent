@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Chain Demo - GorAgent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #13131a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #e4e4e7;
+            --text-secondary: #a1a1aa;
+            --accent-1: #7c3aed;
+            --accent-2: #ec4899;
+            --accent-3: #10b981;
+            --border: #27272a;
+            --shadow: rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .demo-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .demo-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-1);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+        }
+
+        button.secondary:hover:not(:disabled) {
+            background: var(--bg-secondary);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .execution-log {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .execution-log pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .status-badge.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-3);
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .status-badge.running {
+            background: rgba(124, 58, 237, 0.2);
+            color: var(--accent-1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-1);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin: 2rem 0;
+            position: relative;
+        }
+
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--border);
+            z-index: 0;
+        }
+
+        .step {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            flex: 1;
+        }
+
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.5rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .step.active .step-circle {
+            background: var(--accent-1);
+            border-color: var(--accent-1);
+            color: white;
+        }
+
+        .step.completed .step-circle {
+            background: var(--accent-3);
+            border-color: var(--accent-3);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .file-list {
+            margin-top: 1rem;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .file-meta {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(124, 58, 237, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-1);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .demo-section {
+                padding: 1.5rem;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔗 MCP Chain Demo</h1>
+            <p class="subtitle">Демонстрация цепочки MCP инструментов: поиск → суммаризация → сохранение</p>
+        </header>
+
+        <!-- Секция статистики -->
+        <div class="demo-section">
+            <h2>📊 Статистика</h2>
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalExecutions">0</div>
+                    <div class="stat-label">Всего выполнений</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successRate">0%</div>
+                    <div class="stat-label">Успешных</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgDuration">0ms</div>
+                    <div class="stat-label">Среднее время</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="savedFiles">0</div>
+                    <div class="stat-label">Сохранённых файлов</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Секция запуска цепочки -->
+        <div class="demo-section">
+            <h2>🚀 Запуск цепочки</h2>
+            
+            <div class="form-group">
+                <label for="searchQuery">Поисковый запрос</label>
+                <input type="text" id="searchQuery" placeholder="Например: MCP архитектура и лучшие практики" value="MCP интеграция с Node.js">
+            </div>
+
+            <div class="form-group">
+                <label for="searchLimit">Количество результатов поиска</label>
+                <input type="number" id="searchLimit" min="1" max="10" value="5">
+            </div>
+
+            <div class="form-group">
+                <label for="summaryFormat">Формат резюме</label>
+                <select id="summaryFormat">
+                    <option value="bullet-points">Маркированный список</option>
+                    <option value="paragraph">Параграф</option>
+                    <option value="structured">Структурированный</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="summaryMaxLength">Максимальная длина резюме (слов)</label>
+                <input type="number" id="summaryMaxLength" min="50" max="500" value="200">
+            </div>
+
+            <div class="form-group">
+                <label for="saveFormat">Формат файла</label>
+                <select id="saveFormat">
+                    <option value="md">Markdown (.md)</option>
+                    <option value="txt">Текст (.txt)</option>
+                    <option value="json">JSON (.json)</option>
+                </select>
+            </div>
+
+            <!-- Индикатор шагов -->
+            <div class="step-indicator" id="stepIndicator">
+                <div class="step" id="step1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Поиск</div>
+                </div>
+                <div class="step" id="step2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Суммаризация</div>
+                </div>
+                <div class="step" id="step3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Сохранение</div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="runChainBtn" onclick="runChain()">
+                    <span id="runBtnText">▶️ Запустить цепочку</span>
+                    <span id="runBtnSpinner" class="spinner hidden"></span>
+                </button>
+                <button class="secondary" onclick="clearLog()">🗑️ Очистить лог</button>
+                <button class="secondary" onclick="loadStats()">🔄 Обновить статистику</button>
+            </div>
+
+            <!-- Лог выполнения -->
+            <div class="execution-log" id="executionLog">
+                <pre id="logContent">Ожидание запуска...</pre>
+            </div>
+        </div>
+
+        <!-- Секция сохранённых файлов -->
+        <div class="demo-section">
+            <h2>📁 Сохранённые файлы</h2>
+            <div class="button-group">
+                <button class="secondary" onclick="loadFiles()">🔄 Обновить список</button>
+            </div>
+            <div class="file-list" id="fileList">
+                <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">
+                    Нажмите "Обновить список" для загрузки файлов
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API базовый URL
+        const API_BASE = '';
+
+        // Загрузка статистики
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp/stats`);
+                const stats = await response.json();
+
+                document.getElementById('totalExecutions').textContent = stats.totalExecutions || 0;
+                document.getElementById('successRate').textContent = stats.successRate || '0%';
+                document.getElementById('avgDuration').textContent = `${stats.avgDuration || 0}ms`;
+
+                // Загружаем количество файлов
+                const filesResponse = await fetch(`${API_BASE}/api/mcp/files`);
+                const filesData = await filesResponse.json();
+                document.getElementById('savedFiles').textContent = filesData.count || 0;
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+            }
+        }
+
+        // Запуск цепочки
+        async function runChain() {
+            const query = document.getElementById('searchQuery').value;
+            if (!query.trim()) {
+                alert('Введите поисковый запрос');
+                return;
+            }
+
+            const options = {
+                searchLimit: parseInt(document.getElementById('searchLimit').value),
+                summaryFormat: document.getElementById('summaryFormat').value,
+                summaryMaxLength: parseInt(document.getElementById('summaryMaxLength').value),
+                saveFormat: document.getElementById('saveFormat').value
+            };
+
+            // Обновляем UI
+            const runBtn = document.getElementById('runChainBtn');
+            runBtn.disabled = true;
+            document.getElementById('runBtnText').classList.add('hidden');
+            document.getElementById('runBtnSpinner').classList.remove('hidden');
+
+            // Сбрасываем индикатор шагов
+            resetStepIndicator();
+
+            // Очищаем лог
+            addToLog('🚀 Запуск цепочки...', 'running');
+            addToLog(`📝 Запрос: ${query}`);
+            addToLog(`⚙️ Настройки: ${JSON.stringify(options, null, 2)}`);
+
+            try {
+                // Отправляем запрос
+                const response = await fetch(`${API_BASE}/api/mcp/chain`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query, options })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Обновляем индикатор шагов
+                    for (const step of result.execution.steps) {
+                        updateStepIndicator(step.step, 'completed');
+                        addToLog(`✅ Шаг ${step.step} (${step.name}): завершен за ${step.duration}ms`);
+                    }
+
+                    addToLog('\n✨ Цепочка успешно выполнена!', 'success');
+                    addToLog(`📊 Найдено документов: ${result.searchResultsCount}`);
+                    addToLog(`💾 Файл сохранен: ${result.savedFile}`);
+                    addToLog(`⏱️ Общее время: ${result.execution.totalDuration}ms`);
+                    addToLog(`\n📄 Резюме:\n${result.summary}`);
+                } else {
+                    addToLog(`\n❌ Ошибка выполнения цепочки: ${result.error}`, 'error');
+                }
+
+                // Обновляем статистику
+                await loadStats();
+            } catch (error) {
+                addToLog(`\n❌ Ошибка: ${error.message}`, 'error');
+                console.error('Ошибка:', error);
+            } finally {
+                // Восстанавливаем UI
+                runBtn.disabled = false;
+                document.getElementById('runBtnText').classList.remove('hidden');
+                document.getElementById('runBtnSpinner').classList.add('hidden');
+            }
+        }
+
+        // Загрузка списка файлов
+        async function loadFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp/files`);
+                const data = await response.json();
+
+                const fileList = document.getElementById('fileList');
+
+                if (data.files.length === 0) {
+                    fileList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 1rem;">Нет сохранённых файлов</p>';
+                    return;
+                }
+
+                fileList.innerHTML = data.files.map(file => `
+                    <div class="file-item">
+                        <div class="file-info">
+                            <div class="file-name">📄 ${file.filename}</div>
+                            <div class="file-meta">
+                                Размер: ${formatFileSize(file.size)} | 
+                                Создан: ${new Date(file.created).toLocaleString('ru-RU')}
+                            </div>
+                        </div>
+                        <button class="secondary" onclick="viewFile('${file.filename}')">👁️ Просмотр</button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Ошибка загрузки файлов:', error);
+            }
+        }
+
+        // Просмотр файла
+        async function viewFile(filename) {
+            try {
+                const response = await fetch(`${API_BASE}/api/mcp/files/${filename}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    // Открываем в новом окне
+                    const win = window.open('', '_blank');
+                    win.document.write(`
+                        <!DOCTYPE html>
+                        <html lang="ru">
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>${filename}</title>
+                            <style>
+                                body {
+                                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                                    max-width: 900px;
+                                    margin: 0 auto;
+                                    padding: 2rem;
+                                    background: #f5f5f5;
+                                }
+                                pre {
+                                    background: white;
+                                    padding: 1.5rem;
+                                    border-radius: 8px;
+                                    overflow-x: auto;
+                                    white-space: pre-wrap;
+                                    word-wrap: break-word;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <h1>${filename}</h1>
+                            <pre>${escapeHtml(data.content)}</pre>
+                        </body>
+                        </html>
+                    `);
+                }
+            } catch (error) {
+                alert('Ошибка при открытии файла: ' + error.message);
+            }
+        }
+
+        // Вспомогательные функции
+        function addToLog(message, type = 'info') {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString('ru-RU');
+            
+            let prefix = '';
+            if (type === 'success') prefix = '✅ ';
+            if (type === 'error') prefix = '❌ ';
+            if (type === 'running') prefix = '🔄 ';
+            
+            logContent.textContent += `\n[${timestamp}] ${prefix}${message}`;
+            
+            // Автоскролл вниз
+            const logContainer = document.getElementById('executionLog');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logContent').textContent = 'Лог очищен. Ожидание запуска...';
+            resetStepIndicator();
+        }
+
+        function resetStepIndicator() {
+            for (let i = 1; i <= 3; i++) {
+                const step = document.getElementById(`step${i}`);
+                step.classList.remove('active', 'completed');
+            }
+        }
+
+        function updateStepIndicator(stepNumber, status) {
+            const step = document.getElementById(`step${stepNumber}`);
+            step.classList.remove('active', 'completed');
+            step.classList.add(status);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Загружаем статистику при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadFiles();
+        });
+    </script>
+</body>
+</html>
+

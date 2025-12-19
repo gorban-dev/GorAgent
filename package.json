@@ -7,7 +7,10 @@
     "start": "node server.js",
     "dev": "node server.js",
     "stop": "lsof -t -i :${PORT:-3000} | xargs -r kill -9 2>/dev/null || true",
-    "restart": "npm run stop && npm start"
+    "restart": "npm run stop && npm start",
+    "mcp:formatter": "node mcp-server-formatter.js",
+    "mcp:filesaver": "node mcp-server-filesaver.js",
+    "mcp:test": "node mcp-multi-agent.js"
   },
   "keywords": [
     "openai",
