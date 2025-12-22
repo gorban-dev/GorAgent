@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android Emulator MCP - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"],
+        select {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .output {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .output h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .output pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .emulator-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .emulator-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .emulator-item:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .emulator-item.selected {
+            border-color: #667eea;
+            background: #e8eaf6;
+        }
+
+        .emulator-item h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .emulator-item p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .device-status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .device-status.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .device-status.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .quick-action {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .quick-action:hover {
+            transform: scale(1.05);
+        }
+
+        .quick-action .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .quick-action .label {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 Android Emulator MCP</h1>
+            <p>Управление Android эмуляторами через MCP протокол</p>
+        </div>
+
+        <!-- Быстрые действия -->
+        <div class="card">
+            <h2>⚡ Быстрые действия</h2>
+            <div class="quick-actions">
+                <div class="quick-action" onclick="listEmulators()">
+                    <div class="icon">📋</div>
+                    <div class="label">Список эмуляторов</div>
+                </div>
+                <div class="quick-action" onclick="checkStatus()">
+                    <div class="icon">💚</div>
+                    <div class="label">Проверить статус</div>
+                </div>
+                <div class="quick-action" onclick="quickStart()">
+                    <div class="icon">🚀</div>
+                    <div class="label">Быстрый запуск</div>
+                </div>
+                <div class="quick-action" onclick="stopAllEmulators()">
+                    <div class="icon">⏹️</div>
+                    <div class="label">Остановить все</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Управление эмулятором -->
+        <div class="card">
+            <h2>🎮 Управление эмулятором</h2>
+            
+            <div class="control-group">
+                <label>Выберите эмулятор:</label>
+                <div class="input-group">
+                    <select id="emulatorSelect">
+                        <option value="">Сначала загрузите список эмуляторов</option>
+                    </select>
+                    <button onclick="listEmulators()">🔄 Обновить список</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Опции запуска (необязательно):</label>
+                <input type="text" id="startOptions" placeholder="Например: -no-snapshot-load -wipe-data">
+            </div>
+
+            <div class="control-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="waitForBoot" checked>
+                    <label for="waitForBoot">Ждать полной загрузки эмулятора</label>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button onclick="startEmulator()">▶️ Запустить эмулятор</button>
+                <button onclick="stopEmulator()">⏹️ Остановить эмулятор</button>
+                <button onclick="checkStatus()">📊 Проверить статус</button>
+            </div>
+        </div>
+
+        <!-- ADB команды -->
+        <div class="card">
+            <h2>⌨️ ADB команды</h2>
+            
+            <div class="control-group">
+                <label>Команда (без префикса "adb"):</label>
+                <div class="input-group">
+                    <input type="text" id="adbCommand" placeholder="Например: shell pm list packages">
+                    <button onclick="executeAdbCommand()">▶️ Выполнить</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Популярные команды:</label>
+                <div class="button-group">
+                    <button onclick="setAdbCommand('devices')">Список устройств</button>
+                    <button onclick="setAdbCommand('shell pm list packages')">Список приложений</button>
+                    <button onclick="setAdbCommand('shell getprop')">Свойства устройства</button>
+                    <button onclick="setAdbCommand('shell dumpsys battery')">Состояние батареи</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Дополнительные функции -->
+        <div class="card">
+            <h2>🔧 Дополнительные функции</h2>
+            
+            <div class="control-group">
+                <label>Путь к APK файлу:</label>
+                <input type="text" id="apkPath" placeholder="/path/to/your/app.apk">
+            </div>
+
+            <div class="control-group">
+                <label>Путь для сохранения скриншота:</label>
+                <input type="text" id="screenshotPath" placeholder="./screenshot.png" value="./screenshot.png">
+            </div>
+
+            <div class="button-group">
+                <button onclick="installApk()">📦 Установить APK</button>
+                <button onclick="takeScreenshot()">📸 Сделать скриншот</button>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="card">
+            <div id="output" class="output">
+                <h3>📤 Результаты выполнения</h3>
+                <p style="color: #999;">Результаты команд будут отображаться здесь...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MCP_ANDROID_SERVER = 'http://localhost:8083';
+        let availableEmulators = [];
+        let selectedEmulator = null;
+
+        // Утилита для выполнения MCP запросов
+        async function executeMCPTool(toolName, args = {}) {
+            try {
+                showLoading();
+                
+                const response = await fetch(`${MCP_ANDROID_SERVER}/tools/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: toolName,
+                        arguments: args
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.error) {
+                    showError(result.error);
+                } else {
+                    showSuccess(result);
+                }
+
+                return result;
+            } catch (error) {
+                showError(`Ошибка связи с сервером: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Список эмуляторов
+        async function listEmulators() {
+            const result = await executeMCPTool('list_emulators');
+            
+            if (result && result.success) {
+                availableEmulators = result.emulators;
+                updateEmulatorSelect();
+            }
+        }
+
+        // Обновление select с эмуляторами
+        function updateEmulatorSelect() {
+            const select = document.getElementById('emulatorSelect');
+            select.innerHTML = '';
+
+            if (availableEmulators.length === 0) {
+                select.innerHTML = '<option value="">Эмуляторы не найдены</option>';
+            } else {
+                availableEmulators.forEach(emulator => {
+                    const option = document.createElement('option');
+                    option.value = emulator;
+                    option.textContent = emulator;
+                    select.appendChild(option);
+                });
+            }
+        }
+
+        // Запуск эмулятора
+        async function startEmulator() {
+            const emulatorName = document.getElementById('emulatorSelect').value;
+            
+            if (!emulatorName) {
+                showError('Выберите эмулятор для запуска');
+                return;
+            }
+
+            const options = document.getElementById('startOptions').value;
+            const waitForBoot = document.getElementById('waitForBoot').checked;
+
+            await executeMCPTool('start_emulator', {
+                name: emulatorName,
+                options: options,
+                waitForBoot: waitForBoot
+            });
+        }
+
+        // Остановка эмулятора
+        async function stopEmulator() {
+            await executeMCPTool('stop_emulator', {});
+        }
+
+        // Проверка статуса
+        async function checkStatus() {
+            await executeMCPTool('get_emulator_status');
+        }
+
+        // Выполнение ADB команды
+        async function executeAdbCommand() {
+            const command = document.getElementById('adbCommand').value;
+            
+            if (!command) {
+                showError('Введите команду для выполнения');
+                return;
+            }
+
+            await executeMCPTool('execute_adb_command', {
+                command: command
+            });
+        }
+
+        // Установить команду в поле
+        function setAdbCommand(command) {
+            document.getElementById('adbCommand').value = command;
+        }
+
+        // Установка APK
+        async function installApk() {
+            const apkPath = document.getElementById('apkPath').value;
+            
+            if (!apkPath) {
+                showError('Укажите путь к APK файлу');
+                return;
+            }
+
+            await executeMCPTool('install_apk', {
+                apkPath: apkPath
+            });
+        }
+
+        // Скриншот
+        async function takeScreenshot() {
+            const outputPath = document.getElementById('screenshotPath').value;
+
+            await executeMCPTool('take_screenshot', {
+                outputPath: outputPath
+            });
+        }
+
+        // Быстрый запуск
+        async function quickStart() {
+            await listEmulators();
+            
+            setTimeout(() => {
+                if (availableEmulators.length > 0) {
+                    document.getElementById('emulatorSelect').value = availableEmulators[0];
+                    startEmulator();
+                }
+            }, 500);
+        }
+
+        // Остановка всех
+        async function stopAllEmulators() {
+            await executeMCPTool('stop_emulator', {});
+        }
+
+        // Отображение результатов
+        function showSuccess(result) {
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <h3>✅ Успешно</h3>
+                <div class="status success">${result.message || 'Операция выполнена успешно'}</div>
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            `;
+        }
+
+        function showError(error) {
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <h3>❌ Ошибка</h3>
+                <div class="status error">${error}</div>
+            `;
+        }
+
+        function showLoading() {
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <h3>⏳ Выполнение...</h3>
+                <div class="status info">
+                    <div class="loading"></div>
+                    Пожалуйста, подождите...
+                </div>
+            `;
+        }
+
+        // Проверка доступности сервера при загрузке
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${MCP_ANDROID_SERVER}/health`);
+                const health = await response.json();
+                
+                if (health.status === 'ok') {
+                    showSuccess({
+                        message: `Сервер ${health.server} подключен`,
+                        version: health.version,
+                        port: health.port
+                    });
+                    
+                    // Автоматически загружаем список эмуляторов
+                    await listEmulators();
+                }
+            } catch (error) {
+                showError(`Не удалось подключиться к серверу на ${MCP_ANDROID_SERVER}. Убедитесь, что сервер запущен.`);
+            }
+        });
+    </script>
+</body>
+</html>
+

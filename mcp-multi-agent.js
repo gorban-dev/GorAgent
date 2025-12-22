@@ -9,7 +9,8 @@ class MCPMultiAgent {
         this.servers = {
             weather: config.weatherUrl || 'http://localhost:8080',
             formatter: config.formatterUrl || 'http://localhost:8082',
-            fileSaver: config.fileSaverUrl || 'http://localhost:8081'
+            fileSaver: config.fileSaverUrl || 'http://localhost:8081',
+            android: config.androidUrl || 'http://localhost:8083'
         };
         this.executionHistory = [];
     }
@@ -48,6 +49,21 @@ class MCPMultiAgent {
             throw new Error(`Failed to get tools from ${serverUrl}`);
         }
         return await response.json();
+    }
+
+    /**
+     * Выполнение инструмента на конкретном сервере по имени
+     */
+    async executeTool(serverName, toolName, args) {
+        const serverUrl = this.servers[serverName];
+        
+        if (!serverUrl) {
+            throw new Error(`Сервер "${serverName}" не найден. Доступные серверы: ${Object.keys(this.servers).join(', ')}`);
+        }
+
+        console.log(`[MCP Agent] Выполнение ${serverName}.${toolName}`);
+        
+        return await this.callMCPServer(serverUrl, toolName, args);
     }
 
     /**
@@ -419,6 +435,9 @@ class MCPMultiAgent {
             console.log('   - Weather MCP (порт 8080) - ваш существующий сервер');
             console.log('   - node mcp-server-formatter.js (порт 8082)');
             console.log('   - node mcp-server-filesaver.js (порт 8081)');
+            console.log('   - node mcp-server-android.js (порт 8083)');
+            console.log('\nИли запустите все серверы сразу:');
+            console.log('   bash start-mcp-servers.sh');
             return;
         }
 

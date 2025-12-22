@@ -39,8 +39,32 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 секунда
 
 // ===== Конфигурация MCP =====
-const MCP_SERVER_URL = 'http://localhost:8080';
-const MCP_ENABLED = true; // Включить/выключить MCP интеграцию
+const MCP_SERVERS = {
+    weather: {
+        url: 'http://localhost:8080',
+        name: 'Weather MCP',
+        enabled: true
+    },
+    formatter: {
+        url: 'http://localhost:8082',
+        name: 'Formatter MCP',
+        enabled: true
+    },
+    filesaver: {
+        url: 'http://localhost:8081',
+        name: 'FileSaver MCP',
+        enabled: true
+    },
+    android: {
+        url: 'http://localhost:8083',
+        name: 'Android Emulator MCP',
+        enabled: true
+    }
+};
+
+// Для обратной совместимости
+const MCP_SERVER_URL = MCP_SERVERS.weather.url;
+const MCP_ENABLED = Object.values(MCP_SERVERS).some(s => s.enabled);
 
 // ===== Конфигурация сжатия истории =====
 const COMPRESSION_THRESHOLD = 10; // Каждые N сообщений делаем summary
@@ -74,7 +98,7 @@ let compressionStats = {
 // Кэш для инструментов MCP
 let mcpToolsCache = [];
 let mcpToolsCacheTime = 0;
-const MCP_TOOLS_CACHE_TTL = 300000; // 5 минут
+const MCP_TOOLS_CACHE_TTL = 60000; // 1 минута (уменьшено для частого обновления)
 
 // ===== Инициализация MCP Agent =====
 const MCPAgent = require('./mcp-agent');
@@ -83,9 +107,10 @@ const mcpAgent = new MCPAgent();
 // ===== Инициализация MCP Multi-Agent =====
 const MCPMultiAgent = require('./mcp-multi-agent');
 const mcpMultiAgent = new MCPMultiAgent({
-    weatherUrl: MCP_SERVER_URL, // Используем существующий Weather MCP
-    formatterUrl: 'http://localhost:8082',
-    fileSaverUrl: 'http://localhost:8081'
+    weatherUrl: MCP_SERVERS.weather.url,
+    formatterUrl: MCP_SERVERS.formatter.url,
+    fileSaverUrl: MCP_SERVERS.filesaver.url,
+    androidUrl: MCP_SERVERS.android.url
 });
 
 // Функция для получения актуального system prompt с инструментами
@@ -158,37 +183,29 @@ ${toolsDescription}
 }
 
 // Дефолтное системное сообщение для агента (используется если клиент не прислал своё)
-const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, профессиональный и дружелюбный кальянщик с многолетним опытом.
-Ты помогаешь гостям подобрать идеальный кальян на основе их предпочтений.
+const DEFAULT_SYSTEM_PROMPT = `Ты — GorAgent, универсальный AI помощник с доступом к различным инструментам.
 
-ВАЖНО: Ты должен вести диалог по следующему сценарию:
+У тебя есть доступ к следующим категориям инструментов:
+- 📱 Android эмуляторы: управление Android эмуляторами (запуск, остановка, скриншоты, установка APK)
+- 🌤️ Погода: получение информации о погоде
+- 💾 Файлы: сохранение и форматирование данных
 
-1. При ПЕРВОМ сообщении от пользователя — поприветствуй его, представься кальянщиком и начни задавать вопросы по одному.
+Твоя задача:
+1. Понять запрос пользователя
+2. Определить, нужен ли для выполнения запроса какой-то инструмент
+3. Если нужен — вызвать соответствующий инструмент в формате:
+   [{"tool_call": {"name": "имя_инструмента", "arguments": {...}}}]
+4. После получения результата — сформулировать понятный ответ пользователю на русском языке
 
-2. Тебе нужно выяснить ответы на 5 вопросов (задавай их по одному, ожидая ответа):
-   - Вопрос 1: Какой уровень крепости предпочитаете? (лёгкий / средний / крепкий)
-   - Вопрос 2: Какие вкусы вам нравятся? (фруктовые / ягодные / цитрусовые / свежие-мятные / сладкие / пряные-специи)
-   - Вопрос 3: Предпочитаете моно-вкус или микс из нескольких табаков?
-   - Вопрос 4: Есть ли табаки или вкусы, которые вам НЕ нравятся или на которые аллергия?
-   - Вопрос 5: Какое у вас сегодня настроение? Хотите расслабиться, взбодриться или что-то особенное?
+Примеры использования инструментов:
 
-3. Отслеживай, на какие вопросы пользователь уже ответил. Если он ответил не на все 5 вопросов — задай следующий.
+🔹 Для Android эмуляторов:
+- "покажи список эмуляторов" → [{"tool_call": {"name": "android__list_emulators", "arguments": {}}}]
+- "запусти эмулятор Small_Phone" → [{"tool_call": {"name": "android__start_emulator", "arguments": {"name": "Small_Phone"}}}]
+- "сделай скриншот" → [{"tool_call": {"name": "android__take_screenshot", "arguments": {}}}]
+- "какой эмулятор запущен" → [{"tool_call": {"name": "android__get_emulator_status", "arguments": {}}}]
 
-4. После получения ответов на ВСЕ 5 вопросов — выдай персональную рекомендацию кальяна.
-
-ФОРМАТ ФИНАЛЬНОЙ РЕКОМЕНДАЦИИ должен включать:
-- Название микса
-- Описание вкуса и ощущений
-- Конкретные бренды и линейки табака
-- ОБЯЗАТЕЛЬНО: точный рецепт микса с процентами и граммами (стандартная чаша = 25 грамм)
-
-Пример формата микса:
-"🎯 Рецепт микса (чаша 25г):
-• Darkside Core Barvy Citrus — 40% (10г)
-• Tangiers Noir Cane Mint — 30% (7.5г)
-• Fumari White Gummi Bear — 30% (7.5г)"
-
-Отвечай на русском языке. Будь дружелюбным и профессиональным, используй эмодзи где уместно.
+Отвечай на русском языке, будь кратким и полезным. Используй эмодзи где уместно.
 
 Ответ возвращай ТОЛЬКО в формате JSON без дополнительной разметки:
 {"message": "сообщение пользователя", "answer": "твой ответ"}
@@ -199,23 +216,44 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ===== Функции для работы с MCP =====
 
-// Получение списка инструментов от MCP сервера
+// Получение списка инструментов от всех MCP серверов
 async function getMCPTools() {
     if (!MCP_ENABLED) return [];
 
-    try {
-        const response = await fetch(`${MCP_SERVER_URL}/tools`);
-        if (!response.ok) {
-            console.warn('[MCP] Не удалось получить список инструментов:', response.status);
-            return [];
+    const allTools = [];
+
+    for (const [serverKey, serverConfig] of Object.entries(MCP_SERVERS)) {
+        if (!serverConfig.enabled) continue;
+
+        try {
+            const response = await fetch(`${serverConfig.url}/tools`);
+            if (!response.ok) {
+                console.warn(`[MCP] ${serverConfig.name}: не удалось получить инструменты (${response.status})`);
+                continue;
+            }
+            
+            const tools = await response.json();
+            
+            // Добавляем префикс к каждому инструменту для идентификации сервера
+            const toolsWithPrefix = tools.map(tool => ({
+                ...tool,
+                name: `${serverKey}__${tool.name}`, // Префикс сервера
+                _originalName: tool.name,
+                _server: serverKey,
+                _serverUrl: serverConfig.url,
+                _serverName: serverConfig.name,
+                description: `[${serverConfig.name}] ${tool.description}`
+            }));
+            
+            allTools.push(...toolsWithPrefix);
+            console.log(`[MCP] ${serverConfig.name}: получено ${tools.length} инструмент(ов)`);
+        } catch (error) {
+            console.warn(`[MCP] ${serverConfig.name}: ошибка - ${error.message}`);
         }
-        const data = await response.json();
-        console.log('[MCP] Получены инструменты:', data);
-        return data;
-    } catch (error) {
-        console.warn('[MCP] Ошибка при получении инструментов:', error.message);
-        return [];
     }
+
+    console.log(`[MCP] Всего получено инструментов: ${allTools.length}`);
+    return allTools;
 }
 
 // Выполнение инструмента через MCP сервер
@@ -225,24 +263,44 @@ async function executeMCPTool(toolName, arguments) {
     }
 
     try {
-        const response = await fetch(`${MCP_SERVER_URL}/tools/execute`, {
+        // Разбираем имя инструмента: serverKey__originalToolName
+        let serverUrl = MCP_SERVER_URL; // по умолчанию для обратной совместимости
+        let originalToolName = toolName;
+        let serverName = 'MCP Server';
+
+        if (toolName.includes('__')) {
+            const [serverKey, ...nameParts] = toolName.split('__');
+            originalToolName = nameParts.join('__');
+            
+            const serverConfig = MCP_SERVERS[serverKey];
+            if (serverConfig && serverConfig.enabled) {
+                serverUrl = serverConfig.url;
+                serverName = serverConfig.name;
+            } else {
+                throw new Error(`MCP сервер "${serverKey}" не найден или отключен`);
+            }
+        }
+
+        console.log(`[MCP] Выполнение: ${serverName}.${originalToolName}`);
+
+        const response = await fetch(`${serverUrl}/tools/execute`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                name: toolName,
+                name: originalToolName,
                 arguments: arguments
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Ошибка выполнения инструмента: ${response.status}`);
+            throw new Error(errorData.error || `${serverName} error: ${response.status}`);
         }
 
         const result = await response.json();
-        console.log('[MCP] Результат выполнения инструмента:', toolName, result);
+        console.log(`[MCP] ${serverName}.${originalToolName} успешно выполнен`);
         return result;
     } catch (error) {
         console.error('[MCP] Ошибка выполнения инструмента:', error);
@@ -253,23 +311,54 @@ async function executeMCPTool(toolName, arguments) {
 // Обработка tool calls в ответе модели
 async function processToolCalls(responseText, provider = 'openai', model = null, temperature = 0.7) {
     try {
-        // Ищем tool calls в формате [{"tool_call": {"name": "...", "arguments": {...}}}]
-        const toolCallRegex = /\[\s*\{\s*"tool_call"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"arguments"\s*:\s*(\{[^}]*\})\s*\}\s*\}\s*\]/g;
         const toolCalls = [];
-        let match;
 
-        while ((match = toolCallRegex.exec(responseText)) !== null) {
-            try {
-                const toolName = match[1];
-                const argumentsStr = match[2];
-                const arguments = JSON.parse(argumentsStr);
-
+        // Функция для извлечения tool_call из объекта
+        const extractToolCall = (parsed) => {
+            let toolCallObj = null;
+            
+            // Формат: {"tool_call": {"name": "...", "arguments": {...}}}
+            if (parsed.tool_call && parsed.tool_call.name) {
+                toolCallObj = parsed.tool_call;
+            }
+            // Формат: [{"tool_call": {"name": "...", "arguments": {...}}}]
+            else if (Array.isArray(parsed) && parsed[0]?.tool_call) {
+                toolCallObj = parsed[0].tool_call;
+            }
+            // Формат: {"name": "...", "arguments": {...}}
+            else if (parsed.name && parsed.arguments) {
+                toolCallObj = parsed;
+            }
+            
+            if (toolCallObj && toolCallObj.name) {
                 toolCalls.push({
-                    name: toolName,
-                    arguments: arguments
+                    name: toolCallObj.name,
+                    arguments: toolCallObj.arguments || {}
                 });
-            } catch (e) {
-                console.warn('[Tool Call] Ошибка парсинга tool call:', e.message);
+            }
+        };
+
+        // Шаг 1: Пробуем парсить весь ответ как JSON (без markdown)
+        try {
+            const directParsed = JSON.parse(responseText.trim());
+            extractToolCall(directParsed);
+        } catch (e) {
+            // Не JSON напрямую, продолжаем с другими методами
+        }
+
+        // Шаг 2: Извлекаем JSON из markdown блоков ```json ... ```
+        if (toolCalls.length === 0) {
+            const markdownJsonRegex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/g;
+            let jsonMatch;
+            
+            while ((jsonMatch = markdownJsonRegex.exec(responseText)) !== null) {
+                try {
+                    const jsonStr = jsonMatch[1].trim();
+                    const parsed = JSON.parse(jsonStr);
+                    extractToolCall(parsed);
+                } catch (e) {
+                    console.warn('[Tool Call] Ошибка парсинга JSON из markdown:', e.message);
+                }
             }
         }
 
@@ -528,14 +617,20 @@ app.get('/mcp-multi-demo', (req, res) => {
 // API для чата
 app.post('/api/chat', async (req, res) => {
     try {
-        // Проверка API ключа
-        if (!OPENAI_API_KEY) {
+        const { message, history = [], systemPrompt, temperature, maxTokens, provider = 'openai' } = req.body;
+        
+        // Проверка API ключа в зависимости от провайдера
+        if (provider === 'openai' && !OPENAI_API_KEY) {
             return res.status(500).json({ 
                 error: 'API ключ OpenAI не настроен. Добавьте OPENAI_API_KEY в файл .env' 
             });
         }
-
-        const { message, history = [], systemPrompt, temperature, maxTokens } = req.body;
+        
+        if (provider === 'openrouter' && !OPENROUTER_API_KEY) {
+            return res.status(500).json({ 
+                error: 'API ключ OpenRouter не настроен. Добавьте OPENROUTER_API_KEY в файл .env' 
+            });
+        }
         
         // Валидация и ограничение temperature (0-2 для OpenAI)
         const parsedTemp = parseFloat(temperature);
@@ -922,18 +1017,69 @@ app.get('/api/openrouter/models', (req, res) => {
 // Получение списка MCP инструментов
 app.get('/api/mcp/tools', async (req, res) => {
     try {
-        const tools = await getMCPTools();
+        // Параметр refresh для принудительного обновления
+        const refresh = req.query.refresh === 'true';
+        
+        if (refresh) {
+            console.log('[API] Принудительное обновление списка MCP инструментов...');
+            mcpToolsCache = await getMCPTools();
+            mcpToolsCacheTime = Date.now();
+        }
+        
+        const tools = mcpToolsCache.length > 0 ? mcpToolsCache : await getMCPTools();
+        
+        // Группируем инструменты по серверам
+        const toolsByServer = {};
+        tools.forEach(tool => {
+            const serverKey = tool._server || 'unknown';
+            if (!toolsByServer[serverKey]) {
+                toolsByServer[serverKey] = {
+                    serverName: tool._serverName || 'Unknown',
+                    serverUrl: tool._serverUrl || '',
+                    tools: []
+                };
+            }
+            toolsByServer[serverKey].tools.push(tool);
+        });
+
         res.json({
             enabled: MCP_ENABLED,
-            tools: tools,
-            serverUrl: MCP_SERVER_URL
+            totalTools: tools.length,
+            servers: MCP_SERVERS,
+            toolsByServer: toolsByServer,
+            tools: tools, // Все инструменты с префиксами
+            cached: !refresh && mcpToolsCache.length > 0,
+            cacheTime: mcpToolsCacheTime > 0 ? new Date(mcpToolsCacheTime).toISOString() : null
         });
     } catch (error) {
         console.error('[API] Ошибка при получении MCP инструментов:', error);
         res.status(500).json({
             error: 'Не удалось получить список инструментов',
             enabled: MCP_ENABLED,
+            servers: MCP_SERVERS,
             tools: []
+        });
+    }
+});
+
+// Принудительное обновление кеша MCP инструментов
+app.post('/api/mcp/tools/refresh', async (req, res) => {
+    try {
+        console.log('[API] Обновление кеша MCP инструментов...');
+        mcpToolsCache = await getMCPTools();
+        mcpToolsCacheTime = Date.now();
+        
+        res.json({
+            success: true,
+            message: 'Кеш инструментов успешно обновлен',
+            totalTools: mcpToolsCache.length,
+            timestamp: new Date(mcpToolsCacheTime).toISOString()
+        });
+    } catch (error) {
+        console.error('[API] Ошибка обновления кеша:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
@@ -1211,6 +1357,28 @@ app.get('/api/health', async (req, res) => {
         const mcpAgentStats = mcpAgent.getStats();
         const mcpAgentTools = mcpAgent.getTools();
         
+        // Проверяем доступность каждого MCP сервера
+        const serversStatus = {};
+        for (const [key, config] of Object.entries(MCP_SERVERS)) {
+            try {
+                const response = await fetch(`${config.url}/health`, { 
+                    signal: AbortSignal.timeout(3000) 
+                });
+                serversStatus[key] = {
+                    ...config,
+                    available: response.ok,
+                    status: response.ok ? 'online' : 'offline'
+                };
+            } catch (error) {
+                serversStatus[key] = {
+                    ...config,
+                    available: false,
+                    status: 'offline',
+                    error: error.message
+                };
+            }
+        }
+        
         res.json({
             status: 'ok',
             model: OPENAI_MODEL,
@@ -1221,8 +1389,9 @@ app.get('/api/health', async (req, res) => {
             },
             mcp: {
                 enabled: MCP_ENABLED,
-                serverUrl: MCP_SERVER_URL,
-                toolsCount: mcpTools.length
+                serversCount: Object.keys(MCP_SERVERS).length,
+                servers: serversStatus,
+                totalTools: mcpTools.length
             },
             mcpAgent: {
                 enabled: true,
@@ -1241,9 +1410,9 @@ app.get('/api/health', async (req, res) => {
             },
             mcp: {
                 enabled: MCP_ENABLED,
-                serverUrl: MCP_SERVER_URL,
+                servers: MCP_SERVERS,
                 toolsCount: 0,
-                error: 'Не удалось проверить MCP сервер'
+                error: 'Не удалось проверить MCP серверы'
             },
             mcpAgent: {
                 enabled: true,
@@ -1255,7 +1424,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ===== Запуск сервера =====
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log('');
     console.log('╔════════════════════════════════════════════════════════════╗');
     console.log('║                                                            ║');
@@ -1266,6 +1435,19 @@ app.listen(PORT, () => {
     console.log('║   📡 API Провайдеры:                                       ║');
     console.log(`║   • OpenAI:     ${OPENAI_API_KEY ? '✓ Настроен' : '✗ НЕ НАСТРОЕН'}                            ║`);
     console.log(`║   • OpenRouter: ${OPENROUTER_API_KEY ? '✓ Настроен' : '✗ НЕ НАСТРОЕН'}                            ║`);
+    
+    // Загружаем MCP инструменты при старте
+    if (MCP_ENABLED) {
+        console.log('║                                                            ║');
+        console.log('║   🔧 Загрузка MCP инструментов...                         ║');
+        try {
+            mcpToolsCache = await getMCPTools();
+            mcpToolsCacheTime = Date.now();
+            console.log(`║   ✓ Загружено ${mcpToolsCache.length} MCP инструмент(ов)                     ║`);
+        } catch (error) {
+            console.log('║   ✗ Ошибка загрузки MCP инструментов                     ║');
+        }
+    }
     console.log('║                                                            ║');
     console.log(`║   📦 OpenAI модель: ${OPENAI_MODEL.padEnd(33)}║`);
     console.log(`║   📦 OpenRouter моделей: ${String(Object.keys(OPENROUTER_MODELS).length).padEnd(28)}║`);
