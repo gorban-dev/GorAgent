@@ -25,6 +25,11 @@ Thumbs.db
 dist/
 build/
 
+# Document indexes (contains large embedding data)
+document-index.json
+test-document-index.json
+*-index.json
+
 
 
 

@@ -10,7 +10,8 @@
     "restart": "npm run stop && npm start",
     "mcp:formatter": "node mcp-server-formatter.js",
     "mcp:filesaver": "node mcp-server-filesaver.js",
-    "mcp:test": "node mcp-multi-agent.js"
+    "mcp:test": "node mcp-multi-agent.js",
+    "test:indexer": "node test-document-indexer.js"
   },
   "keywords": [
     "openai",

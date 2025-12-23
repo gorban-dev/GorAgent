@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Indexer — Индексация документов с эмбеддингами</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-section {
+            margin-bottom: 20px;
+        }
+
+        .input-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .input-section textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        .input-section textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-section input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-section input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-upload {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .file-upload input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .progress-container {
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid transparent;
+        }
+
+        .log-entry.info {
+            border-left-color: #3b82f6;
+        }
+
+        .log-entry.success {
+            border-left-color: #10b981;
+        }
+
+        .log-entry.error {
+            border-left-color: #ef4444;
+        }
+
+        .log-entry.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .documents-list {
+            margin-top: 20px;
+        }
+
+        .document-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .document-item h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .document-item .meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85rem;
+            color: #666;
+            flex-wrap: wrap;
+        }
+
+        .chunks-preview {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .chunk-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .search-section {
+            margin-top: 20px;
+        }
+
+        .search-results {
+            margin-top: 15px;
+        }
+
+        .search-result-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #10b981;
+        }
+
+        .search-result-item .similarity {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .search-result-item .text {
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .settings-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .setting-item label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .setting-item input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .setting-item input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 Document Indexer</h1>
+            <p>Индексация документов с генерацией эмбеддингов через OpenAI API</p>
+        </div>
+
+        <div class="main-grid">
+            <!-- Левая колонка: Загрузка документов -->
+            <div class="card">
+                <h2>📄 Добавить документы</h2>
+                
+                <div class="settings-section">
+                    <div class="setting-item">
+                        <label>Размер чанка (токены)</label>
+                        <input type="number" id="chunkSize" value="500" min="100" max="2000">
+                    </div>
+                    <div class="setting-item">
+                        <label>Перекрытие (токены)</label>
+                        <input type="number" id="chunkOverlap" value="50" min="0" max="500">
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <label>Текст документа</label>
+                    <textarea id="documentText" placeholder="Вставьте текст документа сюда..."></textarea>
+                </div>
+
+                <div class="input-section">
+                    <label>Название документа</label>
+                    <input type="text" id="documentName" placeholder="README.md">
+                </div>
+
+                <div class="input-section file-upload">
+                    <label>или загрузите файл</label>
+                    <input type="file" id="fileInput" accept=".txt,.md,.json" multiple>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="processDocument()">
+                        <span>🚀</span> Обработать документ
+                    </button>
+                    <button class="btn btn-secondary" onclick="loadSampleDocuments()">
+                        <span>📋</span> Загрузить примеры
+                    </button>
+                </div>
+
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill">0%</div>
+                    </div>
+                </div>
+
+                <div class="log-container" id="logContainer"></div>
+            </div>
+
+            <!-- Правая колонка: Статистика и управление -->
+            <div class="card">
+                <h2>📊 Статистика индекса</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="statDocuments">0</div>
+                        <div class="label">Документов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="statChunks">0</div>
+                        <div class="label">Чанков</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="statTokens">0</div>
+                        <div class="label">Токенов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="statSize">0 KB</div>
+                        <div class="label">Размер индекса</div>
+                    </div>
+                </div>
+
+                <div class="button-group" style="margin-top: 20px;">
+                    <button class="btn btn-success" onclick="saveIndex()">
+                        <span>💾</span> Сохранить индекс
+                    </button>
+                    <button class="btn btn-secondary" onclick="loadIndex()">
+                        <span>📂</span> Загрузить индекс
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadIndex()">
+                        <span>⬇️</span> Скачать JSON
+                    </button>
+                    <button class="btn btn-danger" onclick="clearIndex()">
+                        <span>🗑️</span> Очистить
+                    </button>
+                </div>
+
+                <div class="search-section">
+                    <h3 style="margin-bottom: 10px; color: #667eea;">🔍 Семантический поиск</h3>
+                    <div class="input-section">
+                        <input type="text" id="searchQuery" placeholder="Введите поисковый запрос...">
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="searchDocuments()">
+                            <span>🔍</span> Искать
+                        </button>
+                        <input type="number" id="topK" value="5" min="1" max="20" 
+                               style="width: 80px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                        <label style="display: flex; align-items: center;">результатов</label>
+                    </div>
+                    <div id="searchResults" class="search-results"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список документов -->
+        <div class="card full-width">
+            <h2>📑 Индексированные документы</h2>
+            <div id="documentsList" class="documents-list">
+                <p style="color: #999; text-align: center; padding: 20px;">
+                    Нет индексированных документов. Добавьте документы для начала работы.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        let currentIndex = {
+            documents: [],
+            chunks: [],
+            metadata: {}
+        };
+
+        // Логирование
+        function log(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Обновление прогресс-бара
+        function updateProgress(percent, text = null) {
+            const container = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            container.style.display = percent > 0 ? 'block' : 'none';
+            fill.style.width = `${percent}%`;
+            fill.textContent = text || `${percent}%`;
+        }
+
+        // Обновление статистики
+        function updateStats() {
+            fetch(`${API_BASE}/api/document-indexer/stats`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('statDocuments').textContent = data.totalDocuments || 0;
+                    document.getElementById('statChunks').textContent = data.totalChunks || 0;
+                    document.getElementById('statTokens').textContent = 
+                        (data.totalTokens || 0).toLocaleString();
+                    document.getElementById('statSize').textContent = 
+                        ((data.indexSize || 0) / 1024).toFixed(2) + ' KB';
+                    currentIndex.metadata = data;
+                })
+                .catch(err => {
+                    log('Ошибка загрузки статистики: ' + err.message, 'error');
+                });
+        }
+
+        // Обновление списка документов
+        function updateDocumentsList() {
+            fetch(`${API_BASE}/api/document-indexer/documents`)
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('documentsList');
+                    currentIndex.documents = data.documents || [];
+                    
+                    if (currentIndex.documents.length === 0) {
+                        container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">Нет индексированных документов.</p>';
+                        return;
+                    }
+
+                    container.innerHTML = currentIndex.documents.map(doc => `
+                        <div class="document-item">
+                            <h4>${doc.name}</h4>
+                            <div class="meta">
+                                <span>📝 ${doc.chunksCount} чанков</span>
+                                <span>🔤 ${doc.totalTokens} токенов</span>
+                                <span>📅 ${new Date(doc.processedAt).toLocaleString()}</span>
+                            </div>
+                            <button class="btn btn-secondary" style="margin-top: 10px; padding: 6px 12px;" 
+                                    onclick="showDocumentChunks('${doc.id}')">
+                                Показать чанки
+                            </button>
+                            <div id="chunks-${doc.id}" style="display: none;"></div>
+                        </div>
+                    `).join('');
+                })
+                .catch(err => {
+                    log('Ошибка загрузки документов: ' + err.message, 'error');
+                });
+        }
+
+        // Показать чанки документа
+        function showDocumentChunks(documentId) {
+            const container = document.getElementById(`chunks-${documentId}`);
+            if (container.style.display !== 'none') {
+                container.style.display = 'none';
+                return;
+            }
+
+            fetch(`${API_BASE}/api/document-indexer/documents/${documentId}/chunks`)
+                .then(res => res.json())
+                .then(data => {
+                    container.style.display = 'block';
+                    container.innerHTML = '<div class="chunks-preview">' +
+                        data.chunks.map((chunk, i) => `
+                            <div class="chunk-item">
+                                <strong>Чанк ${i + 1}</strong> (${chunk.tokens} токенов)<br>
+                                ${chunk.text.substring(0, 150)}${chunk.text.length > 150 ? '...' : ''}
+                            </div>
+                        `).join('') +
+                        '</div>';
+                })
+                .catch(err => {
+                    log('Ошибка загрузки чанков: ' + err.message, 'error');
+                });
+        }
+
+        // Обработка документа
+        async function processDocument() {
+            const text = document.getElementById('documentText').value.trim();
+            const name = document.getElementById('documentName').value.trim() || 'Unnamed Document';
+            const chunkSize = parseInt(document.getElementById('chunkSize').value) || 500;
+            const chunkOverlap = parseInt(document.getElementById('chunkOverlap').value) || 50;
+
+            if (!text) {
+                alert('Введите текст документа');
+                return;
+            }
+
+            log('Начинаем обработку документа: ' + name);
+            updateProgress(10, 'Отправка документа...');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/process`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: text,
+                        metadata: { name, type: 'text' },
+                        options: { chunkSize, chunkOverlap }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateProgress(100, 'Готово!');
+                    log(`✅ Документ обработан: ${data.chunks.length} чанков, ${data.totalTokens} токенов`, 'success');
+                    updateStats();
+                    updateDocumentsList();
+                    
+                    // Очищаем поля
+                    document.getElementById('documentText').value = '';
+                    document.getElementById('documentName').value = '';
+                    
+                    setTimeout(() => updateProgress(0), 2000);
+                } else {
+                    throw new Error(data.error || 'Ошибка обработки');
+                }
+            } catch (error) {
+                log('❌ Ошибка: ' + error.message, 'error');
+                updateProgress(0);
+            }
+        }
+
+        // Загрузка примеров документов
+        async function loadSampleDocuments() {
+            const samples = [
+                {
+                    content: `# Введение в машинное обучение
+
+Машинное обучение — это подраздел искусственного интеллекта, который изучает алгоритмы и статистические модели, которые компьютеры используют для выполнения задач без явных инструкций.
+
+## Типы машинного обучения
+
+1. **Обучение с учителем** (Supervised Learning) — модель обучается на размеченных данных.
+2. **Обучение без учителя** (Unsupervised Learning) — модель находит паттерны в неразмеченных данных.
+3. **Обучение с подкреплением** (Reinforcement Learning) — модель учится через взаимодействие со средой.
+
+## Применение
+
+Машинное обучение используется в:
+- Распознавании изображений и речи
+- Рекомендательных системах
+- Обработке естественного языка
+- Автономных транспортных средствах`,
+                    metadata: { name: 'ML-Introduction.md', type: 'markdown' }
+                },
+                {
+                    content: `# Эмбеддинги в NLP
+
+Эмбеддинги — это векторное представление слов, предложений или документов в многомерном пространстве. Они позволяют моделям машинного обучения работать с текстом.
+
+## Популярные модели эмбеддингов
+
+- **Word2Vec** (2013) — первая популярная модель для создания word embeddings
+- **GloVe** (2014) — эмбеддинги на основе глобальной статистики
+- **FastText** (2016) — учитывает морфологию слов
+- **BERT** (2018) — контекстные эмбеддинги
+- **OpenAI Embeddings** (2022) — современные эмбеддинги для различных задач
+
+## Применение эмбеддингов
+
+1. Семантический поиск
+2. Кластеризация документов
+3. Рекомендательные системы
+4. Классификация текста`,
+                    metadata: { name: 'Embeddings-Guide.md', type: 'markdown' }
+                }
+            ];
+
+            for (const sample of samples) {
+                log(`Загрузка примера: ${sample.metadata.name}`);
+                try {
+                    const response = await fetch(`${API_BASE}/api/document-indexer/process`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content: sample.content,
+                            metadata: sample.metadata,
+                            options: {
+                                chunkSize: parseInt(document.getElementById('chunkSize').value) || 500,
+                                chunkOverlap: parseInt(document.getElementById('chunkOverlap').value) || 50
+                            }
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
+                        log(`✅ ${sample.metadata.name} обработан`, 'success');
+                    }
+                } catch (error) {
+                    log(`❌ Ошибка загрузки ${sample.metadata.name}: ${error.message}`, 'error');
+                }
+            }
+
+            updateStats();
+            updateDocumentsList();
+        }
+
+        // Сохранение индекса
+        async function saveIndex() {
+            log('Сохранение индекса...');
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/save`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`✅ Индекс сохранен: ${(data.size / 1024).toFixed(2)} KB`, 'success');
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                log('❌ Ошибка сохранения: ' + error.message, 'error');
+            }
+        }
+
+        // Загрузка индекса
+        async function loadIndex() {
+            log('Загрузка индекса...');
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/load`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`✅ Индекс загружен: ${data.documents} документов, ${data.chunks} чанков`, 'success');
+                    updateStats();
+                    updateDocumentsList();
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                log('❌ Ошибка загрузки: ' + error.message, 'error');
+            }
+        }
+
+        // Скачать индекс как JSON
+        async function downloadIndex() {
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/export`);
+                const data = await response.json();
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `document-index-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                log('✅ Индекс скачан', 'success');
+            } catch (error) {
+                log('❌ Ошибка скачивания: ' + error.message, 'error');
+            }
+        }
+
+        // Очистка индекса
+        async function clearIndex() {
+            if (!confirm('Вы уверены? Все данные будут удалены.')) return;
+            
+            log('Очистка индекса...');
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/clear`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Индекс очищен', 'success');
+                    updateStats();
+                    updateDocumentsList();
+                }
+            } catch (error) {
+                log('❌ Ошибка очистки: ' + error.message, 'error');
+            }
+        }
+
+        // Семантический поиск
+        async function searchDocuments() {
+            const query = document.getElementById('searchQuery').value.trim();
+            const topK = parseInt(document.getElementById('topK').value) || 5;
+
+            if (!query) {
+                alert('Введите поисковый запрос');
+                return;
+            }
+
+            log('Поиск: ' + query);
+            const resultsContainer = document.getElementById('searchResults');
+            resultsContainer.innerHTML = '<p style="color: #999;">Поиск...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/document-indexer/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, topK })
+                });
+
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    log(`✅ Найдено ${data.results.length} результатов`, 'success');
+                    resultsContainer.innerHTML = data.results.map((result, i) => `
+                        <div class="search-result-item">
+                            <div class="similarity">Релевантность: ${(result.similarity * 100).toFixed(1)}%</div>
+                            <div style="color: #666; font-size: 0.85rem; margin-bottom: 5px;">
+                                ${result.chunk.metadata.documentName} • Чанк ${result.chunk.position + 1}
+                            </div>
+                            <div class="text">${result.chunk.text}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    resultsContainer.innerHTML = '<p style="color: #999;">Результаты не найдены</p>';
+                    log('Результаты не найдены', 'warning');
+                }
+            } catch (error) {
+                log('❌ Ошибка поиска: ' + error.message, 'error');
+                resultsContainer.innerHTML = '<p style="color: #ef4444;">Ошибка поиска</p>';
+            }
+        }
+
+        // Обработка файлов
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = e.target.files;
+            if (!files.length) return;
+
+            for (const file of files) {
+                log(`Чтение файла: ${file.name}`);
+                
+                try {
+                    const text = await file.text();
+                    document.getElementById('documentText').value = text;
+                    document.getElementById('documentName').value = file.name;
+                    log(`✅ Файл ${file.name} загружен`, 'success');
+                } catch (error) {
+                    log(`❌ Ошибка чтения файла ${file.name}: ${error.message}`, 'error');
+                }
+            }
+        });
+
+        // Инициализация при загрузке
+        window.addEventListener('load', () => {
+            log('Document Indexer готов к работе', 'success');
+            updateStats();
+            updateDocumentsList();
+        });
+    </script>
+</body>
+</html>
+

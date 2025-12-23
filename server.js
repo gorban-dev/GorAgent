@@ -113,6 +113,16 @@ const mcpMultiAgent = new MCPMultiAgent({
     androidUrl: MCP_SERVERS.android.url
 });
 
+// ===== Инициализация Document Indexer =====
+const DocumentIndexer = require('./document-indexer');
+const documentIndexer = new DocumentIndexer({
+    apiKey: OPENAI_API_KEY,
+    model: 'text-embedding-3-small',
+    chunkSize: 500,
+    chunkOverlap: 50,
+    indexPath: './document-index.json'
+});
+
 // Функция для получения актуального system prompt с инструментами
 async function getSystemPromptWithTools(basePrompt) {
     if (!MCP_ENABLED) {
@@ -612,6 +622,11 @@ app.get('/mcp-demo', (req, res) => {
 // Страница демо MCP Multi-Agent
 app.get('/mcp-multi-demo', (req, res) => {
     res.sendFile(path.join(__dirname, 'mcp-multi-demo.html'));
+});
+
+// Страница демо Document Indexer
+app.get('/document-index-demo', (req, res) => {
+    res.sendFile(path.join(__dirname, 'document-index-demo.html'));
 });
 
 // API для чата
@@ -1350,12 +1365,157 @@ app.get('/api/mcp-multi/history', (req, res) => {
     }
 });
 
+// ===== API для Document Indexer =====
+
+// Обработка документа
+app.post('/api/document-indexer/process', async (req, res) => {
+    try {
+        const { content, metadata = {}, options = {} } = req.body;
+
+        if (!content || typeof content !== 'string') {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Не указан content документа' 
+            });
+        }
+
+        // Обновляем настройки чанкинга если переданы
+        if (options.chunkSize) documentIndexer.chunkSize = options.chunkSize;
+        if (options.chunkOverlap) documentIndexer.chunkOverlap = options.chunkOverlap;
+
+        console.log('[Document Indexer] Обработка документа:', metadata.name || 'Unknown');
+
+        const result = await documentIndexer.processDocument(content, metadata);
+
+        res.json({
+            success: true,
+            document: result.document,
+            chunks: result.chunks,
+            totalTokens: result.totalTokens
+        });
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка обработки документа:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Получение статистики индекса
+app.get('/api/document-indexer/stats', (req, res) => {
+    try {
+        const stats = documentIndexer.getStats();
+        res.json(stats);
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка получения статистики:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Получение списка документов
+app.get('/api/document-indexer/documents', (req, res) => {
+    try {
+        const documents = documentIndexer.getDocuments();
+        res.json({ documents });
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка получения документов:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Получение чанков документа
+app.get('/api/document-indexer/documents/:documentId/chunks', (req, res) => {
+    try {
+        const { documentId } = req.params;
+        const chunks = documentIndexer.getDocumentChunks(documentId);
+        res.json({ chunks });
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка получения чанков:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Сохранение индекса
+app.post('/api/document-indexer/save', async (req, res) => {
+    try {
+        const result = await documentIndexer.saveIndex();
+        res.json(result);
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка сохранения индекса:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Загрузка индекса
+app.post('/api/document-indexer/load', async (req, res) => {
+    try {
+        const result = await documentIndexer.loadIndex();
+        res.json(result);
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка загрузки индекса:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Экспорт индекса (для скачивания)
+app.get('/api/document-indexer/export', (req, res) => {
+    try {
+        res.json(documentIndexer.index);
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка экспорта индекса:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Очистка индекса
+app.post('/api/document-indexer/clear', (req, res) => {
+    try {
+        documentIndexer.clearIndex();
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка очистки индекса:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Семантический поиск
+app.post('/api/document-indexer/search', async (req, res) => {
+    try {
+        const { query, topK = 5 } = req.body;
+
+        if (!query || typeof query !== 'string') {
+            return res.status(400).json({ error: 'Не указан query для поиска' });
+        }
+
+        console.log('[Document Indexer] Поиск:', query);
+
+        const result = await documentIndexer.search(query, topK);
+        res.json(result);
+    } catch (error) {
+        console.error('[Document Indexer] Ошибка поиска:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
 // Проверка статуса сервера
 app.get('/api/health', async (req, res) => {
     try {
         const mcpTools = await getMCPTools();
         const mcpAgentStats = mcpAgent.getStats();
         const mcpAgentTools = mcpAgent.getTools();
+        const documentIndexerStats = documentIndexer.getStats();
         
         // Проверяем доступность каждого MCP сервера
         const serversStatus = {};
@@ -1397,6 +1557,10 @@ app.get('/api/health', async (req, res) => {
                 enabled: true,
                 toolsCount: mcpAgentTools.length,
                 stats: mcpAgentStats
+            },
+            documentIndexer: {
+                enabled: true,
+                stats: documentIndexerStats
             }
         });
     } catch (error) {
@@ -1418,6 +1582,10 @@ app.get('/api/health', async (req, res) => {
                 enabled: true,
                 toolsCount: 3,
                 stats: mcpAgent.getStats()
+            },
+            documentIndexer: {
+                enabled: true,
+                stats: documentIndexer.getStats()
             }
         });
     }
