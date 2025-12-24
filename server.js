@@ -1509,6 +1509,147 @@ app.post('/api/document-indexer/search', async (req, res) => {
     }
 });
 
+// RAG: Вопрос → Поиск → Контекст → LLM
+app.post('/api/document-indexer/rag', async (req, res) => {
+    try {
+        const { question, topK = 3, provider = 'openai', model, temperature = 0.7, compareMode = false } = req.body;
+
+        if (!question || typeof question !== 'string') {
+            return res.status(400).json({ error: 'Не указан вопрос' });
+        }
+
+        console.log('[RAG] Вопрос:', question);
+        console.log('[RAG] Режим сравнения:', compareMode);
+
+        const startTime = Date.now();
+        let ragAnswer = null;
+        let noRagAnswer = null;
+        let searchResults = null;
+        let context = '';
+
+        // RAG режим: поиск релевантных чанков
+        console.log('[RAG] Поиск релевантных чанков...');
+        const searchResult = await documentIndexer.search(question, topK);
+        searchResults = searchResult.results;
+
+        if (searchResults.length === 0) {
+            return res.status(400).json({ 
+                error: 'Не найдено релевантных документов. Добавьте документы в индекс.' 
+            });
+        }
+
+        // Собираем контекст из найденных чанков
+        context = searchResults.map((result, i) => {
+            return `[Документ ${i + 1}: ${result.chunk.metadata.documentName}, релевантность ${(result.similarity * 100).toFixed(1)}%]\n${result.chunk.text}`;
+        }).join('\n\n---\n\n');
+
+        console.log('[RAG] Найдено чанков:', searchResults.length);
+        console.log('[RAG] Размер контекста:', context.length, 'символов');
+
+        // RAG запрос к LLM
+        const ragPrompt = `Ты — AI ассистент, который отвечает на вопросы на основе предоставленного контекста.
+
+КОНТЕКСТ:
+${context}
+
+ВОПРОС: ${question}
+
+ИНСТРУКЦИИ:
+1. Отвечай строго на основе предоставленного контекста
+2. Если информации недостаточно, скажи об этом
+3. Используй факты и примеры из контекста
+4. Отвечай на русском языке, кратко и по существу`;
+
+        console.log('[RAG] Запрос к LLM с контекстом...');
+        
+        let ragResponse;
+        if (provider === 'openai' && OPENAI_API_KEY) {
+            ragResponse = await callOpenAI([
+                { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                { role: 'user', content: ragPrompt }
+            ], temperature);
+        } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+            ragResponse = await callOpenRouter([
+                { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                { role: 'user', content: ragPrompt }
+            ], model || 'openai/gpt-4o-mini', temperature);
+        } else {
+            return res.status(500).json({ error: 'Нет доступного API провайдера' });
+        }
+
+        if (!ragResponse.ok) {
+            const errorData = await ragResponse.json().catch(() => ({}));
+            return res.status(ragResponse.status).json({ 
+                error: errorData.error?.message || 'Ошибка при запросе к LLM' 
+            });
+        }
+
+        const ragData = await ragResponse.json();
+        ragAnswer = ragData.choices?.[0]?.message?.content || 'Не удалось получить ответ';
+
+        const ragTokens = ragData.usage || {};
+
+        // Режим сравнения: запрос без RAG
+        if (compareMode) {
+            console.log('[No RAG] Запрос к LLM без контекста...');
+            
+            let noRagResponse;
+            if (provider === 'openai' && OPENAI_API_KEY) {
+                noRagResponse = await callOpenAI([
+                    { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                    { role: 'user', content: question }
+                ], temperature);
+            } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+                noRagResponse = await callOpenRouter([
+                    { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                    { role: 'user', content: question }
+                ], model || 'openai/gpt-4o-mini', temperature);
+            }
+
+            if (noRagResponse.ok) {
+                const noRagData = await noRagResponse.json();
+                noRagAnswer = noRagData.choices?.[0]?.message?.content || 'Не удалось получить ответ';
+            }
+        }
+
+        const totalTime = Date.now() - startTime;
+
+        console.log('[RAG] Готово за', totalTime, 'мс');
+
+        res.json({
+            success: true,
+            question,
+            rag: {
+                answer: ragAnswer,
+                context: context,
+                chunks: searchResults.map(r => ({
+                    text: r.chunk.text,
+                    document: r.chunk.metadata.documentName,
+                    similarity: r.similarity
+                })),
+                contextLength: context.length,
+                tokens: ragTokens
+            },
+            noRag: compareMode ? {
+                answer: noRagAnswer
+            } : null,
+            metadata: {
+                provider,
+                model: provider === 'openrouter' ? model : OPENAI_MODEL,
+                topK,
+                totalTime,
+                compareMode
+            }
+        });
+
+    } catch (error) {
+        console.error('[RAG] Ошибка:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
 // Проверка статуса сервера
 app.get('/api/health', async (req, res) => {
     try {

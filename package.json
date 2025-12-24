@@ -11,7 +11,8 @@
     "mcp:formatter": "node mcp-server-formatter.js",
     "mcp:filesaver": "node mcp-server-filesaver.js",
     "mcp:test": "node mcp-multi-agent.js",
-    "test:indexer": "node test-document-indexer.js"
+    "test:indexer": "node test-document-indexer.js",
+    "test:rag": "node test-rag.js"
   },
   "keywords": [
     "openai",
