@@ -1558,19 +1558,20 @@ ${context}
 1. Отвечай строго на основе предоставленного контекста
 2. Если информации недостаточно, скажи об этом
 3. Используй факты и примеры из контекста
-4. Отвечай на русском языке, кратко и по существу`;
+4. Отвечай на русском языке, подробно и детально
+5. Структурируй ответ, приводи конкретные примеры из контекста`;
 
         console.log('[RAG] Запрос к LLM с контекстом...');
         
         let ragResponse;
         if (provider === 'openai' && OPENAI_API_KEY) {
             ragResponse = await callOpenAI([
-                { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                { role: 'system', content: 'Ты — полезный AI ассистент, который даёт подробные и структурированные ответы.' },
                 { role: 'user', content: ragPrompt }
             ], temperature);
         } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
             ragResponse = await callOpenRouter([
-                { role: 'system', content: 'Ты — полезный AI ассистент.' },
+                { role: 'system', content: 'Ты — полезный AI ассистент, который даёт подробные и структурированные ответы.' },
                 { role: 'user', content: ragPrompt }
             ], model || 'openai/gpt-4o-mini', temperature);
         } else {
@@ -1593,16 +1594,20 @@ ${context}
         if (compareMode) {
             console.log('[No RAG] Запрос к LLM без контекста...');
             
+            const noRagPrompt = `${question}
+
+Дай краткий ответ на этот вопрос на основе твоих знаний.`;
+            
             let noRagResponse;
             if (provider === 'openai' && OPENAI_API_KEY) {
                 noRagResponse = await callOpenAI([
-                    { role: 'system', content: 'Ты — полезный AI ассистент.' },
-                    { role: 'user', content: question }
+                    { role: 'system', content: 'Ты — полезный AI ассистент, который даёт краткие и лаконичные ответы.' },
+                    { role: 'user', content: noRagPrompt }
                 ], temperature);
             } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
                 noRagResponse = await callOpenRouter([
-                    { role: 'system', content: 'Ты — полезный AI ассистент.' },
-                    { role: 'user', content: question }
+                    { role: 'system', content: 'Ты — полезный AI ассистент, который даёт краткие и лаконичные ответы.' },
+                    { role: 'user', content: noRagPrompt }
                 ], model || 'openai/gpt-4o-mini', temperature);
             }
 
