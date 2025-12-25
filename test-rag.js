@@ -21,9 +21,10 @@ const testQuestions = [
     }
 ];
 
-async function testRAG(question, compareMode = true) {
+async function testRAG(question, compareMode = true, compareThreshold = false, similarityThreshold = 0.7) {
     console.log('\n' + '─'.repeat(60));
     console.log(`ВОПРОС: ${question}`);
+    console.log(`Порог релевантности: ${similarityThreshold} (${(similarityThreshold * 100).toFixed(0)}%)`);
     console.log('─'.repeat(60));
 
     try {
@@ -34,6 +35,8 @@ async function testRAG(question, compareMode = true) {
                 question,
                 topK: 3,
                 compareMode,
+                compareThreshold,
+                similarityThreshold,
                 provider: 'openai'
             })
         });
@@ -44,8 +47,13 @@ async function testRAG(question, compareMode = true) {
             throw new Error(data.error);
         }
 
-        console.log('\n🤖 ОТВЕТ С RAG:');
+        console.log('\n🤖 ОТВЕТ С RAG (с фильтром):');
         console.log(data.rag.answer);
+
+        if (compareThreshold && data.ragNoFilter) {
+            console.log('\n⚠️ ОТВЕТ С RAG (без фильтра):');
+            console.log(data.ragNoFilter.answer);
+        }
 
         if (compareMode && data.noRag) {
             console.log('\n💭 ОТВЕТ БЕЗ RAG:');
@@ -53,35 +61,33 @@ async function testRAG(question, compareMode = true) {
         }
 
         console.log('\n📊 МЕТРИКИ:');
-        console.log(`  Использовано чанков: ${data.rag.chunks.length}`);
+        console.log(`  Найдено чанков: ${data.rag.totalFound}`);
+        console.log(`  После фильтра (≥${(similarityThreshold * 100).toFixed(0)}%): ${data.rag.afterFilter}`);
+        console.log(`  Отфильтровано: ${data.rag.totalFound - data.rag.afterFilter}`);
         console.log(`  Размер контекста: ${data.rag.contextLength} символов`);
         console.log(`  Время выполнения: ${data.metadata.totalTime}ms`);
-        console.log(`  Токенов: ${data.rag.tokens?.total_tokens || 'N/A'}`);
 
         console.log('\n📚 РЕЛЕВАНТНЫЕ ЧАНКИ:');
         data.rag.chunks.forEach((chunk, i) => {
-            console.log(`  ${i + 1}. ${chunk.document} (${(chunk.similarity * 100).toFixed(1)}%)`);
+            const quality = chunk.similarity >= 0.8 ? '✅ Высокая' : 
+                           chunk.similarity >= 0.7 ? '🟡 Средняя' : '⚠️ Низкая';
+            console.log(`  ${i + 1}. ${chunk.document} (${(chunk.similarity * 100).toFixed(1)}% - ${quality})`);
             console.log(`     ${chunk.text.substring(0, 100)}...`);
         });
 
-        // Анализ результатов
-        if (compareMode && data.noRag) {
-            console.log('\n📈 АНАЛИЗ:');
+        // Анализ фильтрации
+        if (data.rag.totalFound > data.rag.afterFilter) {
+            console.log('\n🎯 АНАЛИЗ ФИЛЬТРАЦИИ:');
+            console.log(`  ✅ Отфильтровано ${data.rag.totalFound - data.rag.afterFilter} нерелевантных чанков`);
             
-            const ragLength = data.rag.answer.length;
-            const noRagLength = data.noRag.answer.length;
+            const avgSimilarity = data.rag.chunks.reduce((sum, c) => sum + c.similarity, 0) / data.rag.chunks.length;
+            console.log(`  📈 Средняя релевантность: ${(avgSimilarity * 100).toFixed(1)}%`);
             
-            console.log(`  Длина ответа с RAG: ${ragLength} символов`);
-            console.log(`  Длина ответа без RAG: ${noRagLength} символов`);
-            console.log(`  Разница: ${Math.abs(ragLength - noRagLength)} символов`);
-            
-            if (ragLength > noRagLength * 1.2) {
-                console.log('  ✅ RAG дал более детальный ответ');
-            } else if (ragLength < noRagLength * 0.8) {
-                console.log('  ⚠️ RAG дал более краткий ответ');
-            } else {
-                console.log('  📊 Ответы схожи по длине');
+            if (avgSimilarity >= 0.8) {
+                console.log('  ✅ Используются только высококачественные чанки');
             }
+        } else {
+            console.log('\n📊 Все найденные чанки прошли фильтр релевантности');
         }
 
         return data;
@@ -94,7 +100,7 @@ async function testRAG(question, compareMode = true) {
 
 async function runTests() {
     console.log('\n' + '='.repeat(60));
-    console.log('RAG ФУНКЦИОНАЛ — ТЕСТИРОВАНИЕ');
+    console.log('RAG С ФИЛЬТРАЦИЕЙ — ТЕСТИРОВАНИЕ');
     console.log('='.repeat(60));
 
     // Проверяем наличие документов в индексе
@@ -118,18 +124,42 @@ async function runTests() {
         return;
     }
 
-    // Запускаем тесты
-    for (const test of testQuestions) {
-        await testRAG(test.question, true);
-        
-        // Небольшая задержка между запросами
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    // Тест 1: Стандартный RAG с фильтрацией
+    console.log('\n' + '='.repeat(60));
+    console.log('ТЕСТ 1: RAG с фильтром (порог 0.7)');
+    console.log('='.repeat(60));
+    await testRAG(testQuestions[0].question, false, false, 0.7);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Тест 2: Сравнение С фильтром vs БЕЗ фильтра
+    console.log('\n' + '='.repeat(60));
+    console.log('ТЕСТ 2: Сравнение - С фильтром vs БЕЗ фильтра');
+    console.log('='.repeat(60));
+    await testRAG(testQuestions[1].question, false, true, 0.7);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Тест 3: Высокий порог (только топовые результаты)
+    console.log('\n' + '='.repeat(60));
+    console.log('ТЕСТ 3: Высокий порог фильтрации (0.85)');
+    console.log('='.repeat(60));
+    await testRAG(testQuestions[2].question, false, false, 0.85);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Тест 4: Низкий порог (больше результатов)
+    console.log('\n' + '='.repeat(60));
+    console.log('ТЕСТ 4: Низкий порог фильтрации (0.5)');
+    console.log('='.repeat(60));
+    await testRAG(testQuestions[0].question, false, false, 0.5);
 
     console.log('\n' + '='.repeat(60));
     console.log('✅ ТЕСТИРОВАНИЕ ЗАВЕРШЕНО');
     console.log('='.repeat(60));
-    console.log('\n💡 Откройте веб-интерфейс для визуального сравнения:');
+    console.log('\n💡 Выводы:');
+    console.log('   1. Фильтрация отсеивает нерелевантные чанки');
+    console.log('   2. Порог 0.7-0.8 оптимален для большинства случаев');
+    console.log('   3. Высокий порог (0.85+) = только топовые результаты');
+    console.log('   4. Низкий порог (0.5-0.6) = больше контекста, но с шумом');
+    console.log('\n🌐 Откройте веб-интерфейс для визуального сравнения:');
     console.log('   http://localhost:3000/document-index-demo');
     console.log('\n');
 }

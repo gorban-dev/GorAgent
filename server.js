@@ -1512,7 +1512,16 @@ app.post('/api/document-indexer/search', async (req, res) => {
 // RAG: Вопрос → Поиск → Контекст → LLM
 app.post('/api/document-indexer/rag', async (req, res) => {
     try {
-        const { question, topK = 3, provider = 'openai', model, temperature = 0.7, compareMode = false } = req.body;
+        const { 
+            question, 
+            topK = 3, 
+            provider = 'openai', 
+            model, 
+            temperature = 0.7, 
+            compareMode = false,
+            similarityThreshold = 0.7,  // Порог релевантности
+            compareThreshold = false     // Режим сравнения порогов
+        } = req.body;
 
         if (!question || typeof question !== 'string') {
             return res.status(400).json({ error: 'Не указан вопрос' });
@@ -1520,16 +1529,21 @@ app.post('/api/document-indexer/rag', async (req, res) => {
 
         console.log('[RAG] Вопрос:', question);
         console.log('[RAG] Режим сравнения:', compareMode);
+        console.log('[RAG] Порог релевантности:', similarityThreshold);
+        console.log('[RAG] Сравнение порогов:', compareThreshold);
 
         const startTime = Date.now();
         let ragAnswer = null;
+        let ragAnswerNoFilter = null;  // Для сравнения с фильтром/без
         let noRagAnswer = null;
         let searchResults = null;
+        let filteredResults = null;
         let context = '';
+        let contextNoFilter = '';
 
         // RAG режим: поиск релевантных чанков
         console.log('[RAG] Поиск релевантных чанков...');
-        const searchResult = await documentIndexer.search(question, topK);
+        const searchResult = await documentIndexer.search(question, topK * 2); // Берем больше для фильтрации
         searchResults = searchResult.results;
 
         if (searchResults.length === 0) {
@@ -1538,13 +1552,35 @@ app.post('/api/document-indexer/rag', async (req, res) => {
             });
         }
 
-        // Собираем контекст из найденных чанков
-        context = searchResults.map((result, i) => {
+        // Фильтрация по порогу релевантности
+        filteredResults = searchResults.filter(r => r.similarity >= similarityThreshold).slice(0, topK);
+        const allResults = searchResults.slice(0, topK);
+
+        console.log(`[RAG] Найдено чанков: ${searchResults.length}, после фильтрации (≥${similarityThreshold}): ${filteredResults.length}`);
+
+        if (filteredResults.length === 0) {
+            return res.status(400).json({ 
+                error: `Не найдено чанков с релевантностью ≥ ${(similarityThreshold * 100).toFixed(0)}%. Снизьте порог или добавьте больше релевантных документов.`,
+                maxSimilarity: searchResults[0]?.similarity || 0
+            });
+        }
+
+        // Контекст С ФИЛЬТРОМ
+        context = filteredResults.map((result, i) => {
             return `[Документ ${i + 1}: ${result.chunk.metadata.documentName}, релевантность ${(result.similarity * 100).toFixed(1)}%]\n${result.chunk.text}`;
         }).join('\n\n---\n\n');
 
-        console.log('[RAG] Найдено чанков:', searchResults.length);
-        console.log('[RAG] Размер контекста:', context.length, 'символов');
+        // Контекст БЕЗ ФИЛЬТРА (для сравнения)
+        if (compareThreshold) {
+            contextNoFilter = allResults.map((result, i) => {
+                return `[Документ ${i + 1}: ${result.chunk.metadata.documentName}, релевантность ${(result.similarity * 100).toFixed(1)}%]\n${result.chunk.text}`;
+            }).join('\n\n---\n\n');
+        }
+
+        console.log('[RAG] Размер контекста (с фильтром):', context.length, 'символов');
+        if (compareThreshold) {
+            console.log('[RAG] Размер контекста (без фильтра):', contextNoFilter.length, 'символов');
+        }
 
         // RAG запрос к LLM
         const ragPrompt = `Ты — AI ассистент, который отвечает на вопросы на основе предоставленного контекста.
@@ -1590,6 +1626,43 @@ ${context}
 
         const ragTokens = ragData.usage || {};
 
+        // Режим сравнения порогов: запрос БЕЗ ФИЛЬТРА
+        if (compareThreshold && contextNoFilter) {
+            console.log('[RAG No Filter] Запрос к LLM без фильтра релевантности...');
+            
+            const ragPromptNoFilter = `Ты — AI ассистент, который отвечает на вопросы на основе предоставленного контекста.
+
+КОНТЕКСТ:
+${contextNoFilter}
+
+ВОПРОС: ${question}
+
+ИНСТРУКЦИИ:
+1. Отвечай строго на основе предоставленного контекста
+2. Если информации недостаточно, скажи об этом
+3. Используй факты и примеры из контекста
+4. Отвечай на русском языке, подробно и детально
+5. Структурируй ответ, приводи конкретные примеры из контекста`;
+
+            let ragResponseNoFilter;
+            if (provider === 'openai' && OPENAI_API_KEY) {
+                ragResponseNoFilter = await callOpenAI([
+                    { role: 'system', content: 'Ты — полезный AI ассистент, который даёт подробные и структурированные ответы.' },
+                    { role: 'user', content: ragPromptNoFilter }
+                ], temperature);
+            } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+                ragResponseNoFilter = await callOpenRouter([
+                    { role: 'system', content: 'Ты — полезный AI ассистент, который даёт подробные и структурированные ответы.' },
+                    { role: 'user', content: ragPromptNoFilter }
+                ], model || 'openai/gpt-4o-mini', temperature);
+            }
+
+            if (ragResponseNoFilter.ok) {
+                const ragDataNoFilter = await ragResponseNoFilter.json();
+                ragAnswerNoFilter = ragDataNoFilter.choices?.[0]?.message?.content || 'Не удалось получить ответ';
+            }
+        }
+
         // Режим сравнения: запрос без RAG
         if (compareMode) {
             console.log('[No RAG] Запрос к LLM без контекста...');
@@ -1627,14 +1700,30 @@ ${context}
             rag: {
                 answer: ragAnswer,
                 context: context,
-                chunks: searchResults.map(r => ({
+                chunks: filteredResults.map(r => ({
                     text: r.chunk.text,
                     document: r.chunk.metadata.documentName,
                     similarity: r.similarity
                 })),
                 contextLength: context.length,
-                tokens: ragTokens
+                tokens: ragTokens,
+                filtered: true,
+                threshold: similarityThreshold,
+                totalFound: searchResults.length,
+                afterFilter: filteredResults.length
             },
+            ragNoFilter: compareThreshold && ragAnswerNoFilter ? {
+                answer: ragAnswerNoFilter,
+                context: contextNoFilter,
+                chunks: allResults.map(r => ({
+                    text: r.chunk.text,
+                    document: r.chunk.metadata.documentName,
+                    similarity: r.similarity
+                })),
+                contextLength: contextNoFilter.length,
+                filtered: false,
+                totalChunks: allResults.length
+            } : null,
             noRag: compareMode ? {
                 answer: noRagAnswer
             } : null,
@@ -1643,7 +1732,9 @@ ${context}
                 model: provider === 'openrouter' ? model : OPENAI_MODEL,
                 topK,
                 totalTime,
-                compareMode
+                compareMode,
+                compareThreshold,
+                similarityThreshold
             }
         });
 

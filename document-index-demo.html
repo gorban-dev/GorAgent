@@ -657,9 +657,25 @@
                     <input type="number" id="ragTopK" value="3" min="1" max="10">
                 </div>
                 <div class="setting-item">
+                    <label>Порог релевантности (0-1)</label>
+                    <input type="number" id="ragThreshold" value="0.7" min="0" max="1" step="0.05">
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        Чанки с similarity &lt; порога будут отфильтрованы
+                    </small>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div class="setting-item">
                     <label>
                         <input type="checkbox" id="ragCompareMode" style="width: auto; margin-right: 5px;">
-                        Режим сравнения (с RAG vs без RAG)
+                        Сравнение: С RAG vs Без RAG
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="ragCompareThreshold" style="width: auto; margin-right: 5px;">
+                        Сравнение: С фильтром vs Без фильтра
                     </label>
                 </div>
             </div>
@@ -691,6 +707,20 @@
                     <button class="btn btn-secondary" style="padding: 8px 12px; font-size: 0.85rem;" onclick="document.getElementById('ragQuestion').value = 'Как работают нейронные сети?'">
                         Про нейросети
                     </button>
+                </div>
+            </details>
+
+            <details style="margin-top: 10px; padding: 10px; background: #e8f4ff; border-radius: 6px; border-left: 4px solid #667eea;">
+                <summary style="cursor: pointer; font-weight: 600; color: #667eea;">📊 Рекомендации по порогу релевантности</summary>
+                <div style="margin-top: 10px; font-size: 0.9rem; color: #333; line-height: 1.6;">
+                    <strong>Оптимальные значения порога:</strong>
+                    <ul style="margin: 10px 0; margin-left: 20px;">
+                        <li><strong>0.5-0.6</strong> (низкий): Больше контекста, но возможен "шум"</li>
+                        <li><strong>0.7-0.8</strong> (средний): ⭐ Рекомендуется для большинства случаев</li>
+                        <li><strong>0.85+</strong> (высокий): Только топовые результаты, но может быть мало чанков</li>
+                    </ul>
+                    <strong>💡 Совет:</strong> Начните с 0.7 и настройте по результатам. 
+                    Используйте режим сравнения для оценки влияния фильтрации.
                 </div>
             </details>
 
@@ -1085,6 +1115,8 @@
             const question = document.getElementById('ragQuestion').value.trim();
             const topK = parseInt(document.getElementById('ragTopK').value) || 3;
             const compareMode = document.getElementById('ragCompareMode').checked;
+            const compareThreshold = document.getElementById('ragCompareThreshold').checked;
+            const similarityThreshold = parseFloat(document.getElementById('ragThreshold').value) || 0.7;
 
             if (!question) {
                 alert('Введите вопрос');
@@ -1103,6 +1135,8 @@
                         question,
                         topK,
                         compareMode,
+                        compareThreshold,
+                        similarityThreshold,
                         provider: 'openai'
                     })
                 });
@@ -1134,12 +1168,40 @@
                 </div>
             `;
 
-            // Режим сравнения
-            if (data.metadata.compareMode && data.noRag) {
+            // Режим сравнения порогов фильтрации
+            if (data.metadata.compareThreshold && data.ragNoFilter) {
+                html += `
+                    <div class="rag-comparison">
+                        <div class="rag-answer-box">
+                            <h3>✅ С фильтром (≥${(data.metadata.similarityThreshold * 100).toFixed(0)}%)</h3>
+                            <div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                                Использовано: ${data.rag.afterFilter} из ${data.rag.totalFound} чанков
+                            </div>
+                            <div class="rag-answer-text">${data.rag.answer}</div>
+                        </div>
+                        <div class="rag-answer-box no-rag">
+                            <h3>⚠️ Без фильтра (все чанки)</h3>
+                            <div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                                Использовано: ${data.ragNoFilter.totalChunks} чанков (включая низкую релевантность)
+                            </div>
+                            <div class="rag-answer-text">${data.ragNoFilter.answer}</div>
+                        </div>
+                    </div>
+                `;
+
+                // Анализ влияния фильтрации
+                html += generateFilterAnalysis(data);
+
+            }
+            // Режим сравнения: С RAG vs Без RAG
+            else if (data.metadata.compareMode && data.noRag) {
                 html += `
                     <div class="rag-comparison">
                         <div class="rag-answer-box">
                             <h3>🤖 Ответ С RAG (с контекстом)</h3>
+                            <div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                                Использовано: ${data.rag.afterFilter} чанков (порог ≥${(data.metadata.similarityThreshold * 100).toFixed(0)}%)
+                            </div>
                             <div class="rag-answer-text">${data.rag.answer}</div>
                         </div>
                         <div class="rag-answer-box no-rag">
@@ -1156,24 +1218,37 @@
                 // Только RAG ответ
                 html += `
                     <div class="rag-answer-box">
-                        <h3>🤖 Ответ (RAG)</h3>
+                        <h3>🤖 Ответ (RAG с фильтром)</h3>
+                        <div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                            Использовано: ${data.rag.afterFilter} из ${data.rag.totalFound} чанков (порог ≥${(data.metadata.similarityThreshold * 100).toFixed(0)}%)
+                        </div>
                         <div class="rag-answer-text">${data.rag.answer}</div>
                     </div>
                 `;
             }
 
-            // Использованные чанки
+            // Использованные чанки (с фильтром)
             html += `
                 <div class="rag-chunks">
-                    <h3 style="color: #667eea; margin-bottom: 10px;">📚 Использованные чанки (${data.rag.chunks.length})</h3>
+                    <h3 style="color: #667eea; margin-bottom: 10px;">
+                        📚 Использованные чанки: ${data.rag.chunks.length} 
+                        ${data.rag.totalFound > data.rag.afterFilter ? 
+                            `<span style="color: #f59e0b; font-size: 0.85rem;">(отфильтровано ${data.rag.totalFound - data.rag.afterFilter})</span>` : ''}
+                    </h3>
             `;
 
             data.rag.chunks.forEach((chunk, i) => {
+                const isHighQuality = chunk.similarity >= 0.8;
+                const isMediumQuality = chunk.similarity >= 0.7 && chunk.similarity < 0.8;
+                const badgeColor = isHighQuality ? '#10b981' : isMediumQuality ? '#f59e0b' : '#ef4444';
+                
                 html += `
                     <div class="rag-chunk-item">
                         <div class="chunk-meta">
                             <span>📄 ${chunk.document}</span>
-                            <span class="similarity-badge">${(chunk.similarity * 100).toFixed(1)}%</span>
+                            <span class="similarity-badge" style="background: ${badgeColor};">
+                                ${(chunk.similarity * 100).toFixed(1)}%
+                            </span>
                         </div>
                         <div>${chunk.text.substring(0, 300)}${chunk.text.length > 300 ? '...' : ''}</div>
                     </div>
@@ -1186,8 +1261,12 @@
             html += `
                 <div class="rag-metrics">
                     <div class="rag-metric">
-                        <div class="value">${data.metadata.topK}</div>
-                        <div class="label">Чанков</div>
+                        <div class="value">${data.rag.afterFilter}/${data.rag.totalFound}</div>
+                        <div class="label">Чанков (после/всего)</div>
+                    </div>
+                    <div class="rag-metric">
+                        <div class="value">${(data.metadata.similarityThreshold * 100).toFixed(0)}%</div>
+                        <div class="label">Порог</div>
                     </div>
                     <div class="rag-metric">
                         <div class="value">${(data.rag.contextLength / 1000).toFixed(1)}K</div>
@@ -1197,14 +1276,126 @@
                         <div class="value">${data.metadata.totalTime}ms</div>
                         <div class="label">Время</div>
                     </div>
-                    <div class="rag-metric">
-                        <div class="value">${data.rag.tokens?.total_tokens || 'N/A'}</div>
-                        <div class="label">Токенов</div>
-                    </div>
                 </div>
             `;
 
             container.innerHTML = html;
+        }
+
+        // Генерация анализа влияния фильтрации
+        function generateFilterAnalysis(data) {
+            const withFilter = data.rag.answer.toLowerCase();
+            const withoutFilter = data.ragNoFilter.answer.toLowerCase();
+            
+            const analysis = {
+                moreFocused: false,
+                lessNoise: false,
+                betterQuality: false,
+                conclusion: ''
+            };
+
+            // Проверяем фокусировку (меньше отступлений от темы)
+            analysis.moreFocused = withFilter.length < withoutFilter.length * 1.2;
+
+            // Проверяем качество (наличие конкретики)
+            const withFilterWords = withFilter.match(/\b\w+\b/g) || [];
+            const withoutFilterWords = withoutFilter.match(/\b\w+\b/g) || [];
+            const uniqueWithFilter = new Set(withFilterWords).size;
+            const uniqueWithoutFilter = new Set(withoutFilterWords).size;
+            
+            analysis.lessNoise = uniqueWithFilter / withFilterWords.length > uniqueWithoutFilter / withoutFilterWords.length;
+
+            // Проверяем использование высококачественных чанков
+            const highQualityChunks = data.rag.chunks.filter(c => c.similarity >= 0.8).length;
+            const lowQualityChunks = data.ragNoFilter.chunks.filter(c => c.similarity < 0.7).length;
+            
+            analysis.betterQuality = highQualityChunks > 0 && lowQualityChunks > 0;
+
+            // Формируем выводы
+            const benefits = [];
+            const issues = [];
+
+            if (data.rag.afterFilter < data.rag.totalFound) {
+                benefits.push(`Отфильтровано ${data.rag.totalFound - data.rag.afterFilter} чанков с низкой релевантностью`);
+            }
+
+            if (analysis.moreFocused) {
+                benefits.push('Ответ более сфокусированный и по существу');
+            }
+
+            if (analysis.lessNoise) {
+                benefits.push('Меньше "шума" и отвлекающей информации');
+            }
+
+            if (analysis.betterQuality) {
+                benefits.push('Использованы только высококачественные чанки');
+            }
+
+            const avgSimilarityFiltered = data.rag.chunks.reduce((sum, c) => sum + c.similarity, 0) / data.rag.chunks.length;
+            const avgSimilarityAll = data.ragNoFilter.chunks.reduce((sum, c) => sum + c.similarity, 0) / data.ragNoFilter.chunks.length;
+
+            if (avgSimilarityFiltered > avgSimilarityAll * 1.1) {
+                benefits.push(`Средняя релевантность выше: ${(avgSimilarityFiltered * 100).toFixed(1)}% vs ${(avgSimilarityAll * 100).toFixed(1)}%`);
+            }
+
+            if (benefits.length === 0) {
+                issues.push('Фильтрация не дала значительного эффекта');
+                issues.push('Возможно, порог слишком низкий или все чанки релевантны');
+            }
+
+            let html = `
+                <div class="rag-analysis">
+                    <h3>📊 Анализ: Влияние фильтрации</h3>
+            `;
+
+            if (benefits.length > 0) {
+                html += `
+                    <div style="margin-bottom: 15px;">
+                        <strong>✅ Преимущества фильтрации:</strong>
+                        <ul>
+                            ${benefits.map(b => `<li>${b}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            if (issues.length > 0) {
+                html += `
+                    <div>
+                        <strong>⚠️ Замечания:</strong>
+                        <ul>
+                            ${issues.map(i => `<li>${i}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // Общий вывод
+            if (benefits.length >= 2) {
+                html += `
+                    <div style="margin-top: 15px; padding: 15px; background: rgba(16, 185, 129, 0.2); border-radius: 6px;">
+                        <strong>🎯 Вывод:</strong> Фильтрация значительно улучшила качество ответа, 
+                        используя только релевантные чанки с similarity ≥ ${(data.metadata.similarityThreshold * 100).toFixed(0)}%.
+                    </div>
+                `;
+            } else if (benefits.length > 0) {
+                html += `
+                    <div style="margin-top: 15px; padding: 15px; background: rgba(245, 158, 11, 0.2); border-radius: 6px;">
+                        <strong>🎯 Вывод:</strong> Фильтрация показала умеренный эффект. 
+                        Попробуйте настроить порог релевантности для оптимизации.
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="margin-top: 15px; padding: 15px; background: rgba(239, 68, 68, 0.2); border-radius: 6px;">
+                        <strong>🎯 Вывод:</strong> Фильтрация не показала значительного эффекта. 
+                        Все найденные чанки имеют высокую релевантность.
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            return html;
         }
 
         // Генерация анализа сравнения RAG vs No RAG
