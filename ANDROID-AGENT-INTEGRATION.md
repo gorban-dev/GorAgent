@@ -415,3 +415,4 @@ async function executeToolWithLogging(agent, serverName, toolName, args) {
 
 **Готово!** 🎉 Теперь вы можете управлять Android эмуляторами через агента.
 
+

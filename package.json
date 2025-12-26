@@ -12,7 +12,8 @@
     "mcp:filesaver": "node mcp-server-filesaver.js",
     "mcp:test": "node mcp-multi-agent.js",
     "test:indexer": "node test-document-indexer.js",
-    "test:rag": "node test-rag.js"
+    "test:rag": "node test-rag.js",
+    "chat": "node rag-chat-cli.js"
   },
   "keywords": [
     "openai",

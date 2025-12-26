@@ -394,3 +394,4 @@ bash start-mcp-servers.sh
 - 📚 [Полное руководство](./ANDROID-MCP-GUIDE.md)
 - 🔗 [Интеграция с агентом](./ANDROID-AGENT-INTEGRATION.md)
 
+

@@ -533,3 +533,4 @@ await agent.executeTool('android', 'start_emulator', {
 **Порт по умолчанию:** 8083  
 **Лицензия:** MIT
 
+

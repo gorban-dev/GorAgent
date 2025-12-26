@@ -629,6 +629,11 @@ app.get('/document-index-demo', (req, res) => {
     res.sendFile(path.join(__dirname, 'document-index-demo.html'));
 });
 
+// Страница RAG Chat
+app.get('/rag-chat', (req, res) => {
+    res.sendFile(path.join(__dirname, 'rag-chat.html'));
+});
+
 // API для чата
 app.post('/api/chat', async (req, res) => {
     try {
@@ -1519,8 +1524,8 @@ app.post('/api/document-indexer/rag', async (req, res) => {
             model, 
             temperature = 0.7, 
             compareMode = false,
-            similarityThreshold = 0.7,  // Порог релевантности
-            compareThreshold = false     // Режим сравнения порогов
+            similarityThreshold = 0.6,  // Снижен до 0.6
+            compareThreshold = false
         } = req.body;
 
         if (!question || typeof question !== 'string') {
@@ -1561,7 +1566,8 @@ app.post('/api/document-indexer/rag', async (req, res) => {
         if (filteredResults.length === 0) {
             return res.status(400).json({ 
                 error: `Не найдено чанков с релевантностью ≥ ${(similarityThreshold * 100).toFixed(0)}%. Снизьте порог или добавьте больше релевантных документов.`,
-                maxSimilarity: searchResults[0]?.similarity || 0
+                maxSimilarity: searchResults[0]?.similarity || 0,
+                suggestion: searchResults[0] ? `Максимальная найденная релевантность: ${(searchResults[0].similarity * 100).toFixed(1)}%. Попробуйте снизить порог.` : 'Попробуйте переформулировать вопрос.'
             });
         }
 
@@ -1740,6 +1746,158 @@ ${contextNoFilter}
 
     } catch (error) {
         console.error('[RAG] Ошибка:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Чат-бот с RAG: история + контекст + ответ
+app.post('/api/rag-chat', async (req, res) => {
+    try {
+        const { 
+            message, 
+            history = [],
+            topK = 3,
+            similarityThreshold = 0.6,  // Снижен до 0.6
+            provider = 'openai',
+            model,
+            temperature = 0.7
+        } = req.body;
+
+        if (!message || typeof message !== 'string') {
+            return res.status(400).json({ error: 'Не указано сообщение' });
+        }
+
+        console.log('[RAG Chat] Новое сообщение:', message);
+        console.log('[RAG Chat] История:', history.length, 'сообщений');
+
+        const startTime = Date.now();
+
+        // Шаг 1: Поиск релевантного контекста в документах
+        console.log('[RAG Chat] Поиск контекста в документах...');
+        const searchResult = await documentIndexer.search(message, topK * 2);
+        const allResults = searchResult.results;
+
+        if (allResults.length === 0) {
+            return res.status(400).json({ 
+                error: 'Не найдено документов в индексе. Добавьте документы для работы чата.' 
+            });
+        }
+
+        // Фильтрация по порогу
+        const filteredResults = allResults.filter(r => r.similarity >= similarityThreshold).slice(0, topK);
+
+        if (filteredResults.length === 0) {
+            // Найдем максимальную релевантность
+            const maxSimilarity = allResults[0]?.similarity || 0;
+            const bestResults = allResults.slice(0, 3);
+            
+            return res.status(400).json({ 
+                error: `Не найдено чанков с релевантностью ≥ ${(similarityThreshold * 100).toFixed(0)}%`,
+                suggestion: `Максимальная найденная релевантность: ${(maxSimilarity * 100).toFixed(1)}%. Попробуйте снизить порог до ${Math.max(0.5, Math.floor(maxSimilarity * 10) / 10)} или переформулируйте вопрос.`,
+                maxSimilarity: maxSimilarity,
+                bestMatches: bestResults.map(r => ({
+                    document: r.chunk.metadata.documentName,
+                    similarity: r.similarity,
+                    preview: r.chunk.text.substring(0, 100)
+                }))
+            });
+        }
+
+        console.log(`[RAG Chat] Найдено ${filteredResults.length} релевантных чанков`);
+
+        // Шаг 2: Формируем контекст из документов
+        const sources = filteredResults.map((result, i) => ({
+            id: i + 1,
+            document: result.chunk.metadata.documentName,
+            similarity: result.similarity,
+            text: result.chunk.text,
+            position: result.chunk.position
+        }));
+
+        const documentContext = sources.map(s => 
+            `[Источник ${s.id}: ${s.document}, релевантность ${(s.similarity * 100).toFixed(1)}%]\n${s.text}`
+        ).join('\n\n---\n\n');
+
+        // Шаг 3: Формируем промпт с историей и контекстом
+        const historyContext = history.slice(-5).map(msg => 
+            `${msg.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${msg.content}`
+        ).join('\n');
+
+        const systemPrompt = `Ты — умный AI ассистент с доступом к базе знаний. 
+
+Твоя задача:
+1. Отвечать на вопросы пользователя на основе предоставленного контекста из документов
+2. Учитывать историю диалога для связности ответов
+3. Ссылаться на источники, используя номера [Источник N]
+4. Быть честным: если информации недостаточно, скажи об этом
+5. Отвечать подробно, структурированно и на русском языке
+
+КОНТЕКСТ ИЗ ДОКУМЕНТОВ:
+${documentContext}
+
+${historyContext ? `ИСТОРИЯ ДИАЛОГА:\n${historyContext}\n` : ''}`;
+
+        const userPrompt = `ВОПРОС: ${message}
+
+Дай подробный ответ на основе контекста. В конце укажи, какие источники использовал.`;
+
+        console.log('[RAG Chat] Отправка запроса к LLM...');
+
+        // Шаг 4: Запрос к LLM
+        let response;
+        if (provider === 'openai' && OPENAI_API_KEY) {
+            response = await callOpenAI([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ], temperature);
+        } else if (provider === 'openrouter' && OPENROUTER_API_KEY) {
+            response = await callOpenRouter([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ], model || 'openai/gpt-4o-mini', temperature);
+        } else {
+            return res.status(500).json({ error: 'Нет доступного API провайдера' });
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            return res.status(response.status).json({ 
+                error: errorData.error?.message || 'Ошибка при запросе к LLM' 
+            });
+        }
+
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content || 'Не удалось получить ответ';
+        const tokens = data.usage || {};
+
+        const totalTime = Date.now() - startTime;
+
+        console.log(`[RAG Chat] Ответ получен за ${totalTime}ms`);
+
+        // Возвращаем ответ с источниками
+        res.json({
+            success: true,
+            message: message,
+            answer: answer,
+            sources: sources,
+            metadata: {
+                totalTime,
+                tokens: {
+                    prompt: tokens.prompt_tokens || 0,
+                    completion: tokens.completion_tokens || 0,
+                    total: tokens.total_tokens || 0
+                },
+                sourcesUsed: sources.length,
+                similarityThreshold,
+                provider,
+                model: provider === 'openrouter' ? model : OPENAI_MODEL
+            }
+        });
+
+    } catch (error) {
+        console.error('[RAG Chat] Ошибка:', error);
         res.status(500).json({
             error: error.message
         });
