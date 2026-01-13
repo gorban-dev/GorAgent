@@ -13,7 +13,9 @@
     "mcp:test": "node mcp-multi-agent.js",
     "test:indexer": "node test-document-indexer.js",
     "test:rag": "node test-rag.js",
-    "chat": "node rag-chat-cli.js"
+    "chat": "node rag-chat-cli.js",
+    "index:project": "node index-project-docs.js",
+    "dev-assistant": "npm run index:project && npm start"
   },
   "keywords": [
     "openai",

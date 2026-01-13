@@ -270,3 +270,4 @@ Weather MCP (строка) → Parser (объект) → Formatter MCP → FileS
 
 
 
+

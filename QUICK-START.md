@@ -254,3 +254,4 @@ pkill -f "mcp-server-android" && node mcp-server-android.js &
 И агент сделает всё сам! 🎉
 
 
+

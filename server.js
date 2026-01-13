@@ -1904,6 +1904,120 @@ ${historyContext ? `ИСТОРИЯ ДИАЛОГА:\n${historyContext}\n` : ''}`;
     }
 });
 
+// ===== Development Assistant =====
+const DevAssistant = require('./dev-assistant');
+const ProjectDocIndexer = require('./index-project-docs');
+
+// Инициализация Dev Assistant
+const devAssistant = new DevAssistant({
+    projectPath: __dirname,
+    apiKey: OPENAI_API_KEY,
+    model: OPENAI_MODEL
+});
+
+// Загружаем индекс при старте (если существует)
+devAssistant.loadIndex().catch(err => {
+    console.log('[DevAssistant] Индекс не загружен (возможно не создан). Запустите индексацию.');
+});
+
+// POST /api/dev-assistant/chat - Чат с ассистентом
+app.post('/api/dev-assistant/chat', async (req, res) => {
+    try {
+        const { message } = req.body;
+        
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                error: 'Сообщение не может быть пустым'
+            });
+        }
+        
+        const result = await devAssistant.processMessage(message);
+        
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (error) {
+        console.error('[DevAssistant] Ошибка:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// GET /api/dev-assistant/status - Статус системы
+app.get('/api/dev-assistant/status', async (req, res) => {
+    try {
+        const stats = devAssistant.getStats();
+        const gitContext = await devAssistant.getGitContext();
+        
+        res.json({
+            success: true,
+            indexStats: stats.indexStats,
+            gitToolsCount: stats.gitTools,
+            git: gitContext
+        });
+    } catch (error) {
+        console.error('[DevAssistant] Ошибка получения статуса:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// POST /api/dev-assistant/index - Индексация проекта
+app.post('/api/dev-assistant/index', async (req, res) => {
+    try {
+        console.log('[DevAssistant] Запуск индексации проекта...');
+        
+        const indexer = new ProjectDocIndexer(__dirname);
+        const result = await indexer.indexProject();
+        
+        // Перезагружаем индекс в dev assistant
+        await devAssistant.loadIndex();
+        
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (error) {
+        console.error('[DevAssistant] Ошибка индексации:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// POST /api/dev-assistant/git/:tool - Выполнение git команды
+app.post('/api/dev-assistant/git/:tool', async (req, res) => {
+    try {
+        const { tool } = req.params;
+        const args = req.body || {};
+        
+        const result = await devAssistant.executeGitTool(tool, args);
+        
+        res.json({
+            success: result.success !== false,
+            ...result
+        });
+    } catch (error) {
+        console.error(`[DevAssistant] Ошибка выполнения git/${tool}:`, error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// GET /dev-assistant - Веб-интерфейс
+app.get('/dev-assistant', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dev-assistant.html'));
+});
+
 // Проверка статуса сервера
 app.get('/api/health', async (req, res) => {
     try {
@@ -1911,6 +2025,7 @@ app.get('/api/health', async (req, res) => {
         const mcpAgentStats = mcpAgent.getStats();
         const mcpAgentTools = mcpAgent.getTools();
         const documentIndexerStats = documentIndexer.getStats();
+        const devAssistantStats = devAssistant.getStats();
         
         // Проверяем доступность каждого MCP сервера
         const serversStatus = {};
@@ -1956,6 +2071,10 @@ app.get('/api/health', async (req, res) => {
             documentIndexer: {
                 enabled: true,
                 stats: documentIndexerStats
+            },
+            devAssistant: {
+                enabled: true,
+                stats: devAssistantStats
             }
         });
     } catch (error) {
@@ -1981,6 +2100,10 @@ app.get('/api/health', async (req, res) => {
             documentIndexer: {
                 enabled: true,
                 stats: documentIndexer.getStats()
+            },
+            devAssistant: {
+                enabled: false,
+                error: 'Не удалось получить статистику'
             }
         });
     }
